@@ -35,7 +35,7 @@
     <div id="root"></div>
     
     <script type="text/babel">
-      const { useState, useEffect } = React;
+        const { useState, useEffect } = React;
         
         const Calendar = ({ size = 24, className = "" }) => (
             <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -83,7 +83,7 @@
             </svg>
         );
 
-    const JSONBIN_API_KEY = '$2a$10$/1IjctFCm8nvzrKEAH/KOO3MO6Jj090RnDWC3dxIFwfT2wBgC6.EO';
+        const JSONBIN_API_KEY = '$2a$10$/1IjctFCm8nvzrKEAH/KOO3MO6Jj090RnDWC3dxIFwfT2wBgC6.EO';
         const JSONBIN_BIN_ID = '698c5fe3ae596e708f2250a9';
 
         window.storage = {
@@ -162,6 +162,8 @@
           const [lunchEnabled, setLunchEnabled] = useState(true);
           const [lunchStart, setLunchStart] = useState('11:45');
           const [lunchEnd, setLunchEnd] = useState('12:30');
+          const [isAuthenticated, setIsAuthenticated] = useState(false);
+          const [passwordInput, setPasswordInput] = useState('');
 
           useEffect(() => {
             loadFixtures();
@@ -175,7 +177,6 @@
                 if (data.fixtures && data.fixtures.length > 0) {
                   setFixtures(data.fixtures || []);
                   
-                  // Extract unique teams from fixtures
                   const teamMap = new Map();
                   data.fixtures.forEach(f => {
                     if (!teamMap.has(f.team1.id)) {
@@ -192,19 +193,30 @@
               console.log('No existing fixtures found');
             }
           };
+
           const saveFixtures = async (fixtureData, teamData) => {
             try {
-              await window.storage.set('rugby-fixtures', JSON.stringify({
+              console.log('Attempting to save fixtures...', fixtureData.length);
+              const payload = {
                 fixtures: fixtureData,
                 teams: teamData,
                 generated: new Date().toISOString()
-              }));
+              };
+              console.log('Payload:', payload);
+              
+              const result = await window.storage.set('rugby-fixtures', JSON.stringify(payload));
+              console.log('Save result:', result);
+              
+              if (!result) {
+                console.error('Failed to save - no result returned');
+              } else {
+                console.log('Successfully saved fixtures');
+              }
             } catch (error) {
               console.error('Error saving fixtures:', error);
             }
           };
-
-          const loadTeamsFromCSV = (csvText) => {
+            const loadTeamsFromCSV = (csvText) => {
             const lines = csvText.split('\n');
             const loadedTeams = [];
             
@@ -336,6 +348,7 @@
             
             setLoadingSheet(false);
           };
+
           const generateSampleTeams = () => {
             const clubs = ['Rovers', 'United', 'Wasps', 'Tigers', 'Saints', 'Warriors', 'Chiefs', 'Dragons'];
             const sampleTeams = [];
@@ -548,8 +561,7 @@
             
             return { current, upcoming };
           };
-
-          const downloadFixturesAsExcel = async () => {
+           const downloadFixturesAsExcel = async () => {
             try {
               if (!window.XLSX) {
                 const script = document.createElement('script');
@@ -635,261 +647,302 @@
             }
           };
 
-          return (
-            <div className="min-h-screen bg-gray-50">
-              {view === 'admin' ? (
-                <div className="p-4">
-                  <div className="max-w-6xl mx-auto">
-                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                      <div className="flex items-center justify-between mb-6">
-                        <div>
-                          <h1 className="text-3xl font-bold text-gray-900">U7's Waterfall</h1>
-                          <p className="text-gray-600 mt-1">Generate and manage fixtures</p>
-                        </div>
-                        <button onClick={() => setView('public')} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                          <Eye size={20} />
-                          Preview Public View
-                        </button>
+          if (view === 'admin') {
+            if (!isAuthenticated) {
+              return (
+                <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+                    <h1 className="text-2xl font-bold text-gray-900 mb-4">Admin Access</h1>
+                    <p className="text-gray-600 mb-6">Please enter the password to access the admin panel.</p>
+                    <input
+                      type="password"
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          if (passwordInput === 'Nissan01') {
+                            setIsAuthenticated(true);
+                          } else {
+                            alert('Incorrect password');
+                            setPasswordInput('');
+                          }
+                        }
+                      }}
+                      placeholder="Enter password"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => {
+                        if (passwordInput === 'Nissan01') {
+                          setIsAuthenticated(true);
+                        } else {
+                          alert('Incorrect password');
+                          setPasswordInput('');
+                        }
+                      }}
+                      className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Login
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="min-h-screen bg-gray-50 p-4">
+                <div className="max-w-6xl mx-auto">
+                  <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h1 className="text-3xl font-bold text-gray-900">U7's Waterfall</h1>
+                        <p className="text-gray-600 mt-1">Generate and manage fixtures</p>
                       </div>
-                      {error && (
-                        <div className={`mb-4 p-4 ${error.includes('Successfully') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} border rounded-lg`}>
-                          {error}
-                        </div>
-                      )}
-                      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h3 className="font-semibold text-blue-900 mb-3">Load Teams from Google Sheet</h3>
-                        <div className="mb-3 flex gap-2">
-                          <button onClick={() => setUploadMethod('url')} className={`px-4 py-2 rounded-lg ${uploadMethod === 'url' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300'}`}>From URL</button>
-                          <button onClick={() => setUploadMethod('file')} className={`px-4 py-2 rounded-lg ${uploadMethod === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300'}`}>Upload File</button>
-                        </div>
-                        {uploadMethod === 'url' ? (
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Google Sheet URL</label>
-                              <input type="text" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                              <p className="text-xs text-gray-600 mt-1">Make sure your sheet is published to web</p>
-                            </div>
-                            <button onClick={loadTeamsFromSheet} disabled={loadingSheet || !sheetUrl} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
-                              <Download size={18} className={loadingSheet ? 'animate-spin' : ''} />
-                              {loadingSheet ? 'Loading...' : 'Load Teams from Sheet'}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Upload Excel or CSV File</label>
-                              <p className="text-xs text-gray-600 mb-2">Download your sheet as Excel (.xlsx) or CSV</p>
-                              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white" />
-                            </div>
-                          </div>
-                        )}
-                        {teams.length > 0 && <p className="text-sm text-green-700 font-medium mt-3">✓ {teams.length} teams loaded and ready</p>}
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Number of Rounds</label>
-                          <input type="number" value={numRounds} onChange={(e) => setNumRounds(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="12" />
-                          <p className="text-xs text-gray-600 mt-1">Matches per team</p>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Number of Pitches</label>
-                          <input type="number" value={numPitches} onChange={(e) => setNumPitches(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="20" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Match Duration (mins)</label>
-                          <input type="number" value={matchDuration} onChange={(e) => setMatchDuration(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="10" max="20" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
-                          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                        </div>
-                      </div>
-                      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                        <div className="flex items-center gap-2 mb-3">
-                          <input type="checkbox" id="lunchEnabled" checked={lunchEnabled} onChange={(e) => setLunchEnabled(e.target.checked)} className="w-4 h-4" />
-                          <label htmlFor="lunchEnabled" className="font-semibold text-amber-900">Schedule Lunch Break</label>
-                        </div>
-                        {lunchEnabled && (
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Lunch Start</label>
-                              <input type="time" value={lunchStart} onChange={(e) => setLunchStart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Lunch End</label>
-                              <input type="time" value={lunchEnd} onChange={(e) => setLunchEnd(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <button onClick={generateFixtures} disabled={loading} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
-                        <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-                        {loading ? 'Generating...' : 'Generate Fixtures'}
+                      <button onClick={() => setView('public')} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        <Eye size={20} />
+                        Preview Public View
                       </button>
                     </div>
-                    {fixtures.length > 0 && (
-                      <div className="bg-white rounded-lg shadow-lg p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-2xl font-bold text-gray-900">Generated Fixtures ({fixtures.length} matches)</h2>
-                          <div className="flex gap-2">
-                            <div className="text-sm text-gray-600">{teams.length} teams</div>
-                            <button onClick={downloadFixturesAsExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                              <Download size={18} />
-                              Download Excel
-                            </button>
-                          </div>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Pitch</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 1</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 2</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {fixtures.slice(0, 30).map(f => (
-                                <tr key={f.id} className="hover:bg-gray-50">
-                                  <td className="px-4 py-3 text-sm">{f.time}</td>
-                                  <td className="px-4 py-3 text-sm font-medium">Pitch {f.pitch}</td>
-                                  <td className="px-4 py-3 text-sm">{f.team1.name}</td>
-                                  <td className="px-4 py-3 text-sm">{f.team2.name}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {fixtures.length > 30 && <p className="text-center text-gray-500 mt-4">Showing 30 of {fixtures.length} fixtures</p>}
-                        </div>
+                    {error && (
+                      <div className={`mb-4 p-4 ${error.includes('Successfully') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} border rounded-lg`}>
+                        {error}
                       </div>
                     )}
-                  </div>
-                </div>
-              ) : (
-                <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-                  <div className="bg-green-600 text-white p-4 sticky top-0 z-10 shadow-lg">
-                    <div className="max-w-2xl mx-auto">
-                      <div className="flex items-center justify-between mb-3">
-                        <h1 className="text-2xl font-bold">U7's Waterfall</h1>
-                        <button onClick={() => setView('admin')} className="px-3 py-1 bg-white text-green-600 rounded-lg text-sm font-medium">Admin</button>
+                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h3 className="font-semibold text-blue-900 mb-3">Load Teams from Google Sheet</h3>
+                      <div className="mb-3 flex gap-2">
+                        <button onClick={() => setUploadMethod('url')} className={`px-4 py-2 rounded-lg ${uploadMethod === 'url' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300'}`}>From URL</button>
+                        <button onClick={() => setUploadMethod('file')} className={`px-4 py-2 rounded-lg ${uploadMethod === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300'}`}>Upload File</button>
                       </div>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-3 text-green-600" size={20} />
-                        <input type="text" placeholder="Search for your team..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 text-lg" />
+                      {uploadMethod === 'url' ? (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Google Sheet URL</label>
+                            <input type="text" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                            <p className="text-xs text-gray-600 mt-1">Make sure your sheet is published to web</p>
+                          </div>
+                          <button onClick={loadTeamsFromSheet} disabled={loadingSheet || !sheetUrl} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                            <Download size={18} className={loadingSheet ? 'animate-spin' : ''} />
+                            {loadingSheet ? 'Loading...' : 'Load Teams from Sheet'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Upload Excel or CSV File</label>
+                            <p className="text-xs text-gray-600 mb-2">Download your sheet as Excel (.xlsx) or CSV</p>
+                            <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white" />
+                          </div>
+                        </div>
+                      )}
+                      {teams.length > 0 && <p className="text-sm text-green-700 font-medium mt-3">✓ {teams.length} teams loaded and ready</p>}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Number of Rounds</label>
+                        <input type="number" value={numRounds} onChange={(e) => setNumRounds(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="12" />
+                        <p className="text-xs text-gray-600 mt-1">Matches per team</p>
                       </div>
-                      {searchTerm && (
-                        <div className="mt-2 bg-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                          {filteredTeams.map(team => (
-                            <button key={team.id} onClick={() => { setSelectedTeam(team); setSearchTerm(''); }} className="w-full px-4 py-3 text-left hover:bg-green-50 border-b border-gray-100 text-gray-900">
-                              <div className="font-medium">{team.name}</div>
-                              <div className="text-sm text-gray-600">Club: {team.club}</div>
-                            </button>
-                          ))}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Number of Pitches</label>
+                        <input type="number" value={numPitches} onChange={(e) => setNumPitches(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="20" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Match Duration (mins)</label>
+                        <input type="number" value={matchDuration} onChange={(e) => setMatchDuration(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="10" max="20" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                      </div>
+                    </div>
+                    <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-3">
+                        <input type="checkbox" id="lunchEnabled" checked={lunchEnabled} onChange={(e) => setLunchEnabled(e.target.checked)} className="w-4 h-4" />
+                        <label htmlFor="lunchEnabled" className="font-semibold text-amber-900">Schedule Lunch Break</label>
+                      </div>
+                      {lunchEnabled && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Lunch Start</label>
+                            <input type="time" value={lunchStart} onChange={(e) => setLunchStart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Lunch End</label>
+                            <input type="time" value={lunchEnd} onChange={(e) => setLunchEnd(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                          </div>
                         </div>
                       )}
                     </div>
+                    <button onClick={generateFixtures} disabled={loading} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                      <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+                      {loading ? 'Generating...' : 'Generate Fixtures'}
+                    </button>
                   </div>
-                  <div className="max-w-2xl mx-auto p-4">
-                    {fixtures.length === 0 ? (
-                      <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                        <Calendar size={48} className="mx-auto text-gray-400 mb-4" />
-                        <h2 className="text-xl font-bold text-gray-900 mb-2">No Fixtures Yet</h2>
-                        <p className="text-gray-600">Fixtures will appear here once generated by the admin.</p>
-                      </div>
-                    ) : selectedTeam ? (
-                      <div>
-                        <button onClick={() => setSelectedTeam(null)} className="mb-4 text-green-600 font-medium">← Back to all fixtures</button>
-                        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
-                          <h2 className="text-xl font-bold text-gray-900">{selectedTeam.name}</h2>
-                          <p className="text-gray-600">Club: {selectedTeam.club}</p>
-                          <p className="text-gray-600">{getTeamFixtures(selectedTeam.id).length} fixtures</p>
-                        </div>
-                        <div className="space-y-3">
-                          {getTeamFixtures(selectedTeam.id).map((fixture, idx) => {
-                            const opponent = fixture.team1.id === selectedTeam.id ? fixture.team2 : fixture.team1;
-                            return (
-                              <div key={fixture.id} className="bg-white rounded-lg shadow p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-2xl font-bold text-green-600">{fixture.time}</span>
-                                  <span className="text-lg font-medium text-gray-700">Match {idx + 1}</span>
-                                </div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <MapPin size={18} className="text-gray-500" />
-                                  <span className="font-medium text-gray-900">Pitch {fixture.pitch}</span>
-                                </div>
-                                <div className="text-gray-700">
-                                  <span className="font-medium">vs</span> {opponent.name}
-                                </div>
-                              </div>
-                            );
-                          })}
+                  {fixtures.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-2xl font-bold text-gray-900">Generated Fixtures ({fixtures.length} matches)</h2>
+                        <div className="flex gap-2">
+                          <div className="text-sm text-gray-600">{teams.length} teams</div>
+                          <button onClick={downloadFixturesAsExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                            <Download size={18} />
+                            Download Excel
+                          </button>
                         </div>
                       </div>
-                    ) : (
-                      <>
-                        {getCurrentAndNext().current.length > 0 && (
-                          <div className="mb-6">
-                            <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-                              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                              Playing Now
-                            </h2>
-                            <div className="space-y-3">
-                              {getCurrentAndNext().current.map(f => (
-                                <div key={f.id} className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-red-500">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xl font-bold text-gray-900">{f.time}</span>
-                                    <span className="flex items-center gap-1 font-medium text-gray-700">
-                                      <MapPin size={16} />
-                                      Pitch {f.pitch}
-                                    </span>
-                                  </div>
-                                  <div className="text-gray-900">
-                                    <div className="font-medium">{f.team1.name}</div>
-                                    <div className="text-gray-500 text-sm my-1">vs</div>
-                                    <div className="font-medium">{f.team2.name}</div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {getCurrentAndNext().upcoming.length > 0 && (
-                          <div>
-                            <h2 className="text-xl font-bold text-gray-900 mb-3">Up Next</h2>
-                            <div className="space-y-3">
-                              {getCurrentAndNext().upcoming.map(f => (
-                                <div key={f.id} className="bg-white rounded-lg shadow p-4">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xl font-bold text-green-600">{f.time}</span>
-                                    <span className="flex items-center gap-1 font-medium text-gray-700">
-                                      <MapPin size={16} />
-                                      Pitch {f.pitch}
-                                    </span>
-                                  </div>
-                                  <div className="text-gray-900 text-sm">
-                                    <div>{f.team1.name}</div>
-                                    <div className="text-gray-500 my-1">vs</div>
-                                    <div>{f.team2.name}</div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Pitch</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 1</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 2</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {fixtures.slice(0, 30).map(f => (
+                              <tr key={f.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-sm">{f.time}</td>
+                                <td className="px-4 py-3 text-sm font-medium">Pitch {f.pitch}</td>
+                                <td className="px-4 py-3 text-sm">{f.team1.name}</td>
+                                <td className="px-4 py-3 text-sm">{f.team2.name}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {fixtures.length > 30 && <p className="text-center text-gray-500 mt-4">Showing 30 of {fixtures.length} fixtures</p>}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            );
+          }
+           const { current, upcoming } = getCurrentAndNext();
+          const teamFixtures = selectedTeam ? getTeamFixtures(selectedTeam.id) : [];
+
+          return (
+            <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
+              <div className="bg-green-600 text-white p-4 sticky top-0 z-10 shadow-lg">
+                <div className="max-w-2xl mx-auto">
+                  <div className="flex items-center justify-between mb-3">
+                    <h1 className="text-2xl font-bold">U7's Waterfall</h1>
+                    <button onClick={() => setView('admin')} className="px-3 py-1 bg-white text-green-600 rounded-lg text-sm font-medium">Admin</button>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 text-green-600" size={20} />
+                    <input type="text" placeholder="Search for your team..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 text-lg" />
+                  </div>
+                  {searchTerm && (
+                    <div className="mt-2 bg-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredTeams.map(team => (
+                        <button key={team.id} onClick={() => { setSelectedTeam(team); setSearchTerm(''); }} className="w-full px-4 py-3 text-left hover:bg-green-50 border-b border-gray-100 text-gray-900">
+                          <div className="font-medium">{team.name}</div>
+                          <div className="text-sm text-gray-600">Club: {team.club}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="max-w-2xl mx-auto p-4">
+                {fixtures.length === 0 ? (
+                  <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                    <Calendar size={48} className="mx-auto text-gray-400 mb-4" />
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">No Fixtures Yet</h2>
+                    <p className="text-gray-600">Fixtures will appear here once generated by the admin.</p>
+                  </div>
+                ) : selectedTeam ? (
+                  <div>
+                    <button onClick={() => setSelectedTeam(null)} className="mb-4 text-green-600 font-medium">← Back to all fixtures</button>
+                    <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+                      <h2 className="text-xl font-bold text-gray-900">{selectedTeam.name}</h2>
+                      <p className="text-gray-600">Club: {selectedTeam.club}</p>
+                      <p className="text-gray-600">{teamFixtures.length} fixtures</p>
+                    </div>
+                    <div className="space-y-3">
+                      {teamFixtures.map((fixture, idx) => {
+                        const opponent = fixture.team1.id === selectedTeam.id ? fixture.team2 : fixture.team1;
+                        return (
+                          <div key={fixture.id} className="bg-white rounded-lg shadow p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-2xl font-bold text-green-600">{fixture.time}</span>
+                              <span className="text-lg font-medium text-gray-700">Match {idx + 1}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <MapPin size={18} className="text-gray-500" />
+                              <span className="font-medium text-gray-900">Pitch {fixture.pitch}</span>
+                            </div>
+                            <div className="text-gray-700">
+                              <span className="font-medium">vs</span> {opponent.name}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {current.length > 0 && (
+                      <div className="mb-6">
+                        <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                          Playing Now
+                        </h2>
+                        <div className="space-y-3">
+                          {current.map(f => (
+                            <div key={f.id} className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-red-500">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xl font-bold text-gray-900">{f.time}</span>
+                                <span className="flex items-center gap-1 font-medium text-gray-700">
+                                  <MapPin size={16} />
+                                  Pitch {f.pitch}
+                                </span>
+                              </div>
+                              <div className="text-gray-900">
+                                <div className="font-medium">{f.team1.name}</div>
+                                <div className="text-gray-500 text-sm my-1">vs</div>
+                                <div className="font-medium">{f.team2.name}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {upcoming.length > 0 && (
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900 mb-3">Up Next</h2>
+                        <div className="space-y-3">
+                          {upcoming.map(f => (
+                            <div key={f.id} className="bg-white rounded-lg shadow p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xl font-bold text-green-600">{f.time}</span>
+                                <span className="flex items-center gap-1 font-medium text-gray-700">
+                                  <MapPin size={16} />
+                                  Pitch {f.pitch}
+                                </span>
+                              </div>
+                              <div className="text-gray-900 text-sm">
+                                <div>{f.team1.name}</div>
+                                <div className="text-gray-500 my-1">vs</div>
+                                <div>{f.team2.name}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           );
         };
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<RugbyFixtureApp />);
     </script>
 </body>
 </html>
-
-
