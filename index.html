@@ -1,320 +1,838 @@
-{teams.length > 0 && (
-                    <p className="text-sm text-green-700 font-medium mt-3">
-                      ✓ {teams.length} teams loaded and ready
-                    </p>
-                  )}
-                </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U7's Waterfall - Rugby Fixtures</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            margin: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+        
+        const Calendar = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        );
+        
+        const MapPin = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+        );
+        
+        const Search = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+        );
+        
+        const RefreshCw = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        );
+        
+        const Eye = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+        );
+        
+        const Download = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        );
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Number of Rounds
-                    </label>
-                    <input
-                      type="number"
-                      value={numRounds}
-                      onChange={(e) => setNumRounds(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      min="4"
-                      max="12"
-                    />
-                    <p className="text-xs text-gray-600 mt-1">Matches per team</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Number of Pitches
-                    </label>
-                    <input
-                      type="number"
-                      value={numPitches}
-                      onChange={(e) => setNumPitches(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      min="4"
-                      max="20"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Match Duration (mins)
-                    </label>
-                    <input
-                      type="number"
-                      value={matchDuration}
-                      onChange={(e) => setMatchDuration(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                      min="10"
-                      max="20"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Start Time
-                    </label>
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
+        window.storage = {
+            get: async function(key) {
+                const value = localStorage.getItem(key);
+                return value ? { key, value } : null;
+            },
+            set: async function(key, value) {
+                localStorage.setItem(key, value);
+                return { key, value };
+            },
+            delete: async function(key) {
+                localStorage.removeItem(key);
+                return { key, deleted: true };
+            }
+        };
 
-                <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                  <div className="flex items-center gap-2 mb-3">
-                    <input
-                      type="checkbox"
-                      id="lunchEnabled"
-                      checked={lunchEnabled}
-                      onChange={(e) => setLunchEnabled(e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    <label htmlFor="lunchEnabled" className="font-semibold text-amber-900">
-                      Schedule Lunch Break
-                    </label>
-                  </div>
+        const RugbyFixtureApp = () => {
+          const urlParams = new URLSearchParams(window.location.search);
+          const initialView = urlParams.get('view') === 'public' ? 'public' : 'admin';
+          
+          const [view, setView] = useState(initialView);
+          const [teams, setTeams] = useState([]);
+          const [fixtures, setFixtures] = useState([]);
+          const [searchTerm, setSearchTerm] = useState('');
+          const [selectedTeam, setSelectedTeam] = useState(null);
+          const [numPitches, setNumPitches] = useState(16);
+          const [matchDuration, setMatchDuration] = useState(15);
+          const [startTime, setStartTime] = useState('10:30');
+          const [numRounds, setNumRounds] = useState(8);
+          const [loading, setLoading] = useState(false);
+          const [error, setError] = useState('');
+          const [sheetUrl, setSheetUrl] = useState('');
+          const [loadingSheet, setLoadingSheet] = useState(false);
+          const [uploadMethod, setUploadMethod] = useState('url');
+          const [lunchEnabled, setLunchEnabled] = useState(true);
+          const [lunchStart, setLunchStart] = useState('11:45');
+          const [lunchEnd, setLunchEnd] = useState('12:30');
+
+          useEffect(() => {
+            loadFixtures();
+          }, []);
+
+          const loadFixtures = async () => {
+            try {
+              const result = await window.storage.get('rugby-fixtures');
+              if (result && result.value) {
+                const data = JSON.parse(result.value);
+                setFixtures(data.fixtures || []);
+                setTeams(data.teams || []);
+              }
+            } catch (error) {
+              console.log('No existing fixtures found');
+            }
+          };
+
+          const saveFixtures = async (fixtureData, teamData) => {
+            try {
+              await window.storage.set('rugby-fixtures', JSON.stringify({
+                fixtures: fixtureData,
+                teams: teamData,
+                generated: new Date().toISOString()
+              }));
+            } catch (error) {
+              console.error('Error saving fixtures:', error);
+            }
+          };
+
+          const loadTeamsFromCSV = (csvText) => {
+            const lines = csvText.split('\n');
+            const loadedTeams = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+              
+              const columns = line.split(',').map(col => col.replace(/^"|"$/g, '').trim());
+              
+              const clubName = columns[0];
+              const numTeams = parseInt(columns[1]) || 0;
+              
+              for (let t = 0; t < numTeams && t < 5; t++) {
+                const teamName = columns[2 + t];
+                if (teamName && teamName.trim() !== '') {
+                  loadedTeams.push({
+                    id: `team-${loadedTeams.length}`,
+                    name: teamName.trim(),
+                    club: clubName,
+                    pitchAssignment: null
+                  });
+                }
+              }
+            }
+            
+            return loadedTeams;
+          };
+
+          const handleFileUpload = (event) => {
+            setLoadingSheet(true);
+            setError('');
+            
+            const file = event.target.files[0];
+            if (!file) {
+              setLoadingSheet(false);
+              return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              try {
+                const data = e.target.result;
+                let loadedTeams = [];
+                
+                if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                  if (!window.XLSX) {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+                    await new Promise((resolve, reject) => {
+                      script.onload = resolve;
+                      script.onerror = reject;
+                      document.head.appendChild(script);
+                    });
+                  }
                   
-                  {lunchEnabled && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Lunch Start
-                        </label>
-                        <input
-                          type="time"
-                          value={lunchStart}
-                          onChange={(e) => setLunchStart(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Lunch End
-                        </label>
-                        <input
-                          type="time"
-                          value={lunchEnd}
-                          onChange={(e) => setLunchEnd(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                  const workbook = window.XLSX.read(data, { type: 'array' });
+                  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                  const csvText = window.XLSX.utils.sheet_to_csv(firstSheet);
+                  
+                  loadedTeams = loadTeamsFromCSV(csvText);
+                } else {
+                  const csvText = new TextDecoder().decode(data);
+                  loadedTeams = loadTeamsFromCSV(csvText);
+                }
+                
+                if (loadedTeams.length === 0) {
+                  throw new Error('No teams found in file');
+                }
+                
+                setTeams(loadedTeams);
+                setError(`Successfully loaded ${loadedTeams.length} teams from ${new Set(loadedTeams.map(t => t.club)).size} clubs`);
+              } catch (err) {
+                setError('Error reading file: ' + err.message);
+                console.error(err);
+              }
+              setLoadingSheet(false);
+            };
+            
+            reader.onerror = () => {
+              setError('Error reading file');
+              setLoadingSheet(false);
+            };
+            
+            if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+              reader.readAsArrayBuffer(file);
+            } else {
+              reader.readAsText(file);
+            }
+          };
 
-                <button
-                  onClick={generateFixtures}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-                  {loading ? 'Generating...' : 'Generate Fixtures'}
-                </button>
-              </div>
+          const loadTeamsFromSheet = async () => {
+            setLoadingSheet(true);
+            setError('');
+            
+            try {
+              let sheetId = '';
+              const urlMatch = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+              if (urlMatch) {
+                sheetId = urlMatch[1];
+              } else {
+                throw new Error('Invalid Google Sheets URL');
+              }
+              
+              const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=0`;
+              
+              const response = await fetch(csvUrl, {
+                method: 'GET',
+                mode: 'cors'
+              });
+              
+              if (!response.ok) {
+                throw new Error('Failed to fetch sheet');
+              }
+              
+              const csvText = await response.text();
+              const loadedTeams = loadTeamsFromCSV(csvText);
+              
+              if (loadedTeams.length === 0) {
+                throw new Error('No teams found in sheet');
+              }
+              
+              setTeams(loadedTeams);
+              setError(`Successfully loaded ${loadedTeams.length} teams from ${new Set(loadedTeams.map(t => t.club)).size} clubs`);
+              
+            } catch (err) {
+              setError('Error loading sheet: ' + err.message);
+              console.error(err);
+            }
+            
+            setLoadingSheet(false);
+          };
+          const generateSampleTeams = () => {
+            const clubs = ['Rovers', 'United', 'Wasps', 'Tigers', 'Saints', 'Warriors', 'Chiefs', 'Dragons'];
+            const sampleTeams = [];
+            
+            for (let i = 0; i < 64; i++) {
+              const clubIndex = Math.floor(i / 8);
+              const teamNumber = (i % 8) + 1;
+              sampleTeams.push({
+                id: `team-${i}`,
+                name: `${clubs[clubIndex]} U7 Team ${teamNumber}`,
+                club: clubs[clubIndex],
+                pitchAssignment: null
+              });
+            }
+            
+            return sampleTeams;
+          };
 
-              {fixtures.length > 0 && (
-                <div className="bg-white rounded-lg shadow-lg p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl font-bold text-gray-900">
-                      Generated Fixtures ({fixtures.length} matches)
-                    </h2>
-                    <div className="flex gap-2">
-                      <div className="text-sm text-gray-600">
-                        {teams.length} teams
+          const isLunchTime = (time) => {
+            if (!lunchEnabled) return false;
+            return time >= lunchStart && time < lunchEnd;
+          };
+
+          const getNextAvailableTime = (time) => {
+            if (isLunchTime(time)) {
+              return lunchEnd;
+            }
+            return time;
+          };
+
+          const addMinutes = (time, mins) => {
+            const [h, m] = time.split(':').map(Number);
+            const total = h * 60 + m + mins;
+            return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+          };
+
+          const generateFixtures = async () => {
+            setLoading(true);
+            setError('');
+            
+            try {
+              const teamList = teams.length > 0 ? teams : generateSampleTeams();
+              
+              const allFixtures = [];
+              const teamFixtureCounts = {};
+              const playedMatchups = new Set();
+              const clubMatchupsPerTeam = {};
+              
+              teamList.forEach(t => {
+                teamFixtureCounts[t.id] = 0;
+                clubMatchupsPerTeam[t.id] = new Set();
+              });
+              
+              let totalRounds = 0;
+              const maxRounds = numRounds * 3;
+              let currentTime = startTime;
+              
+              while (totalRounds < maxRounds) {
+                const usedTeamsThisRound = new Set();
+                const roundFixtures = [];
+                let pitchNum = 1;
+                
+                const teamsNeedingMatches = teamList.filter(t => teamFixtureCounts[t.id] < numRounds);
+                
+                if (teamsNeedingMatches.length === 0) {
+                  break;
+                }
+                
+                let attempts = 0;
+                const maxAttemptsPerRound = 1000;
+                
+                while (attempts < maxAttemptsPerRound && pitchNum <= numPitches) {
+                  attempts++;
+                  
+                  const availableTeams = teamsNeedingMatches.filter(t => !usedTeamsThisRound.has(t.id));
+                  
+                  if (availableTeams.length < 2) break;
+                  
+                  let bestMatch = null;
+                  let bestScore = -Infinity;
+                  
+                  for (let i = 0; i < availableTeams.length; i++) {
+                    const t1 = availableTeams[i];
+                    
+                    for (let j = i + 1; j < availableTeams.length; j++) {
+                      const t2 = availableTeams[j];
+                      
+                      const matchupKey = [t1.id, t2.id].sort().join('-');
+                      const sameClub = t1.club === t2.club;
+                      const alreadyPlayed = playedMatchups.has(matchupKey);
+                      
+                      if (sameClub || alreadyPlayed) continue;
+                      
+                      const t1PlayedClub = clubMatchupsPerTeam[t1.id].has(t2.club);
+                      const t2PlayedClub = clubMatchupsPerTeam[t2.id].has(t1.club);
+                      
+                      let score = 1000;
+                      
+                      if (!t1PlayedClub && !t2PlayedClub) {
+                        score += 100;
+                      } else if (!t1PlayedClub || !t2PlayedClub) {
+                        score += 50;
+                      } else {
+                        score -= 100;
+                      }
+                      
+                      score += (numRounds - teamFixtureCounts[t1.id]) * 20;
+                      score += (numRounds - teamFixtureCounts[t2.id]) * 20;
+                      
+                      score += (10 - clubMatchupsPerTeam[t1.id].size) * 5;
+                      score += (10 - clubMatchupsPerTeam[t2.id].size) * 5;
+                      
+                      if (score > bestScore) {
+                        bestScore = score;
+                        bestMatch = { t1, t2, matchupKey };
+                      }
+                    }
+                  }
+                  
+                  if (bestMatch) {
+                    const { t1, t2, matchupKey } = bestMatch;
+                    
+                    const fixtureTime = currentTime;
+                    
+                    roundFixtures.push({
+                      id: `fixture-${totalRounds}-${pitchNum}`,
+                      round: totalRounds + 1,
+                      pitch: pitchNum,
+                      time: fixtureTime,
+                      team1: t1,
+                      team2: t2
+                    });
+                    
+                    playedMatchups.add(matchupKey);
+                    teamFixtureCounts[t1.id]++;
+                    teamFixtureCounts[t2.id]++;
+                    usedTeamsThisRound.add(t1.id);
+                    usedTeamsThisRound.add(t2.id);
+                    
+                    clubMatchupsPerTeam[t1.id].add(t2.club);
+                    clubMatchupsPerTeam[t2.id].add(t1.club);
+                    
+                    pitchNum++;
+                    attempts = 0;
+                  } else {
+                    break;
+                  }
+                }
+                
+                if (roundFixtures.length > 0) {
+                  allFixtures.push(...roundFixtures);
+                } else {
+                  break;
+                }
+                
+                totalRounds++;
+                
+                let nextTime = addMinutes(currentTime, matchDuration);
+                currentTime = getNextAvailableTime(nextTime);
+              }
+              
+              if (allFixtures.length === 0) {
+                setError('Failed to generate fixtures. Try adjusting the number of pitches or rounds.');
+              } else {
+                setFixtures(allFixtures);
+                setTeams(teamList);
+                await saveFixtures(allFixtures, teamList);
+                
+                const fixtureCounts = Object.values(teamFixtureCounts);
+                const minFixtures = Math.min(...fixtureCounts);
+                const maxFixtures = Math.max(...fixtureCounts);
+                const avgFixtures = (fixtureCounts.reduce((a, b) => a + b, 0) / fixtureCounts.length).toFixed(1);
+                
+                const teamsWithTarget = fixtureCounts.filter(c => c === numRounds).length;
+                
+                let summary = `Generated ${allFixtures.length} fixtures across ${totalRounds} rounds. `;
+                summary += `Teams have ${minFixtures}-${maxFixtures} matches (avg: ${avgFixtures}). `;
+                summary += `${teamsWithTarget}/${teamList.length} teams have exactly ${numRounds} matches.`;
+                
+                setError(summary);
+                console.log(summary);
+              }
+            } catch (err) {
+              setError('Error generating fixtures: ' + err.message);
+              console.error(err);
+            }
+            
+            setLoading(false);
+          };
+
+          const filteredTeams = teams.filter(t => 
+            t.name.toLowerCase().includes(searchTerm.toLowerCase())
+          );
+
+          const getTeamFixtures = (teamId) => {
+            return fixtures.filter(f => 
+              f.team1.id === teamId || f.team2.id === teamId
+            ).sort((a, b) => a.time.localeCompare(b.time));
+          };
+
+          const getCurrentAndNext = () => {
+            const now = new Date();
+            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            
+            const current = fixtures.filter(f => f.time <= currentTime && 
+              currentTime < addMinutes(f.time, matchDuration));
+            const upcoming = fixtures.filter(f => f.time > currentTime)
+              .sort((a, b) => a.time.localeCompare(b.time))
+              .slice(0, numPitches);
+            
+            return { current, upcoming };
+          };
+
+          const downloadFixturesAsExcel = async () => {
+            try {
+              if (!window.XLSX) {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+                await new Promise((resolve, reject) => {
+                  script.onload = resolve;
+                  script.onerror = reject;
+                  document.head.appendChild(script);
+                });
+              }
+
+              const wb = window.XLSX.utils.book_new();
+
+              const fixtureData = [['Round', 'Time', 'Pitch', 'Team 1', 'Team 2', 'Club 1', 'Club 2']];
+              fixtures.forEach(f => {
+                fixtureData.push([f.round, f.time, f.pitch, f.team1.name, f.team2.name, f.team1.club, f.team2.club]);
+              });
+              const wsFixtures = window.XLSX.utils.aoa_to_sheet(fixtureData);
+              window.XLSX.utils.book_append_sheet(wb, wsFixtures, 'All Fixtures');
+
+              const teamData = [['Team', 'Club', 'Round', 'Time', 'Pitch', 'Opponent', 'Opponent Club']];
+              teams.forEach(team => {
+                const teamFixtures = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id)
+                  .sort((a, b) => a.time.localeCompare(b.time));
+                teamFixtures.forEach(f => {
+                  const opponent = f.team1.id === team.id ? f.team2 : f.team1;
+                  teamData.push([team.name, team.club, f.round, f.time, f.pitch, opponent.name, opponent.club]);
+                });
+              });
+              const wsTeams = window.XLSX.utils.aoa_to_sheet(teamData);
+              window.XLSX.utils.book_append_sheet(wb, wsTeams, 'By Team');
+
+              const rounds = [...new Set(fixtures.map(f => f.round))].sort((a, b) => a - b);
+              const roundData = [['Round', 'Time', 'Pitch', 'Team 1', 'Team 2']];
+              rounds.forEach(round => {
+                const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
+                roundFixtures.forEach(f => {
+                  roundData.push([f.round, f.time, f.pitch, f.team1.name, f.team2.name]);
+                });
+                if (round < rounds.length) {
+                  roundData.push(['', '', '', '', '']);
+                }
+              });
+              const wsRounds = window.XLSX.utils.aoa_to_sheet(roundData);
+              window.XLSX.utils.book_append_sheet(wb, wsRounds, 'By Round');
+
+              const pitches = [...new Set(fixtures.map(f => f.pitch))].sort((a, b) => a - b);
+              const pitchData = [['Pitch', 'Time', 'Round', 'Team 1', 'Team 2']];
+              pitches.forEach(pitch => {
+                const pitchFixtures = fixtures.filter(f => f.pitch === pitch).sort((a, b) => a.time.localeCompare(b.time));
+                pitchFixtures.forEach(f => {
+                  pitchData.push([f.pitch, f.time, f.round, f.team1.name, f.team2.name]);
+                });
+                if (pitch < pitches.length) {
+                  pitchData.push(['', '', '', '', '']);
+                }
+              });
+              const wsPitches = window.XLSX.utils.aoa_to_sheet(pitchData);
+              window.XLSX.utils.book_append_sheet(wb, wsPitches, 'By Pitch');
+
+              const allTimes = [...new Set(fixtures.map(f => f.time))].sort();
+              const matrixData = [['Team', ...allTimes]];
+              teams.forEach(team => {
+                const row = [team.name];
+                allTimes.forEach(time => {
+                  const fixture = fixtures.find(f => f.time === time && (f.team1.id === team.id || f.team2.id === team.id));
+                  if (fixture) {
+                    const opponent = fixture.team1.id === team.id ? fixture.team2 : fixture.team1;
+                    row.push(opponent.name);
+                  } else {
+                    row.push('');
+                  }
+                });
+                matrixData.push(row);
+              });
+              const wsMatrix = window.XLSX.utils.aoa_to_sheet(matrixData);
+              window.XLSX.utils.book_append_sheet(wb, wsMatrix, 'Team Schedule Matrix');
+
+              window.XLSX.writeFile(wb, 'Rugby_Festival_Fixtures.xlsx');
+            } catch (err) {
+              setError('Error generating Excel file: ' + err.message);
+              console.error(err);
+            }
+          };
+
+          return (
+            <div className="min-h-screen bg-gray-50">
+              {view === 'admin' ? (
+                <div className="p-4">
+                  <div className="max-w-6xl mx-auto">
+                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <h1 className="text-3xl font-bold text-gray-900">U7's Waterfall</h1>
+                          <p className="text-gray-600 mt-1">Generate and manage fixtures</p>
+                        </div>
+                        <button onClick={() => setView('public')} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                          <Eye size={20} />
+                          Preview Public View
+                        </button>
                       </div>
-                      <button
-                        onClick={downloadFixturesAsExcel}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                      >
-                        <Download size={18} />
-                        Download Excel
+                      {error && (
+                        <div className={`mb-4 p-4 ${error.includes('Successfully') ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} border rounded-lg`}>
+                          {error}
+                        </div>
+                      )}
+                      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h3 className="font-semibold text-blue-900 mb-3">Load Teams from Google Sheet</h3>
+                        <div className="mb-3 flex gap-2">
+                          <button onClick={() => setUploadMethod('url')} className={`px-4 py-2 rounded-lg ${uploadMethod === 'url' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300'}`}>From URL</button>
+                          <button onClick={() => setUploadMethod('file')} className={`px-4 py-2 rounded-lg ${uploadMethod === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-300'}`}>Upload File</button>
+                        </div>
+                        {uploadMethod === 'url' ? (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Google Sheet URL</label>
+                              <input type="text" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                              <p className="text-xs text-gray-600 mt-1">Make sure your sheet is published to web</p>
+                            </div>
+                            <button onClick={loadTeamsFromSheet} disabled={loadingSheet || !sheetUrl} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                              <Download size={18} className={loadingSheet ? 'animate-spin' : ''} />
+                              {loadingSheet ? 'Loading...' : 'Load Teams from Sheet'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Upload Excel or CSV File</label>
+                              <p className="text-xs text-gray-600 mb-2">Download your sheet as Excel (.xlsx) or CSV</p>
+                              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white" />
+                            </div>
+                          </div>
+                        )}
+                        {teams.length > 0 && <p className="text-sm text-green-700 font-medium mt-3">✓ {teams.length} teams loaded and ready</p>}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Number of Rounds</label>
+                          <input type="number" value={numRounds} onChange={(e) => setNumRounds(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="12" />
+                          <p className="text-xs text-gray-600 mt-1">Matches per team</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Number of Pitches</label>
+                          <input type="number" value={numPitches} onChange={(e) => setNumPitches(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="20" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Match Duration (mins)</label>
+                          <input type="number" value={matchDuration} onChange={(e) => setMatchDuration(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="10" max="20" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+                          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                      </div>
+                      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <input type="checkbox" id="lunchEnabled" checked={lunchEnabled} onChange={(e) => setLunchEnabled(e.target.checked)} className="w-4 h-4" />
+                          <label htmlFor="lunchEnabled" className="font-semibold text-amber-900">Schedule Lunch Break</label>
+                        </div>
+                        {lunchEnabled && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Lunch Start</label>
+                              <input type="time" value={lunchStart} onChange={(e) => setLunchStart(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Lunch End</label>
+                              <input type="time" value={lunchEnd} onChange={(e) => setLunchEnd(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <button onClick={generateFixtures} disabled={loading} className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+                        <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+                        {loading ? 'Generating...' : 'Generate Fixtures'}
                       </button>
                     </div>
+                    {fixtures.length > 0 && (
+                      <div className="bg-white rounded-lg shadow-lg p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-2xl font-bold text-gray-900">Generated Fixtures ({fixtures.length} matches)</h2>
+                          <div className="flex gap-2">
+                            <div className="text-sm text-gray-600">{teams.length} teams</div>
+                            <button onClick={downloadFixturesAsExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                              <Download size={18} />
+                              Download Excel
+                            </button>
+                          </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Pitch</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 1</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 2</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {fixtures.slice(0, 30).map(f => (
+                                <tr key={f.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm">{f.time}</td>
+                                  <td className="px-4 py-3 text-sm font-medium">Pitch {f.pitch}</td>
+                                  <td className="px-4 py-3 text-sm">{f.team1.name}</td>
+                                  <td className="px-4 py-3 text-sm">{f.team2.name}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {fixtures.length > 30 && <p className="text-center text-gray-500 mt-4">Showing 30 of {fixtures.length} fixtures</p>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Pitch</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 1</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 2</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {fixtures.slice(0, 30).map(f => (
-                          <tr key={f.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">{f.time}</td>
-                            <td className="px-4 py-3 text-sm font-medium">Pitch {f.pitch}</td>
-                            <td className="px-4 py-3 text-sm">{f.team1.name}</td>
-                            <td className="px-4 py-3 text-sm">{f.team2.name}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {fixtures.length > 30 && (
-                      <p className="text-center text-gray-500 mt-4">
-                        Showing 30 of {fixtures.length} fixtures
-                      </p>
+                </div>
+              ) : (
+                <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
+                  <div className="bg-green-600 text-white p-4 sticky top-0 z-10 shadow-lg">
+                    <div className="max-w-2xl mx-auto">
+                      <div className="flex items-center justify-between mb-3">
+                        <h1 className="text-2xl font-bold">U7's Waterfall</h1>
+                        <button onClick={() => setView('admin')} className="px-3 py-1 bg-white text-green-600 rounded-lg text-sm font-medium">Admin</button>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-3 text-green-600" size={20} />
+                        <input type="text" placeholder="Search for your team..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 text-lg" />
+                      </div>
+                      {searchTerm && (
+                        <div className="mt-2 bg-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredTeams.map(team => (
+                            <button key={team.id} onClick={() => { setSelectedTeam(team); setSearchTerm(''); }} className="w-full px-4 py-3 text-left hover:bg-green-50 border-b border-gray-100 text-gray-900">
+                              <div className="font-medium">{team.name}</div>
+                              <div className="text-sm text-gray-600">Club: {team.club}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="max-w-2xl mx-auto p-4">
+                    {fixtures.length === 0 ? (
+                      <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                        <Calendar size={48} className="mx-auto text-gray-400 mb-4" />
+                        <h2 className="text-xl font-bold text-gray-900 mb-2">No Fixtures Yet</h2>
+                        <p className="text-gray-600">Fixtures will appear here once generated by the admin.</p>
+                      </div>
+                    ) : selectedTeam ? (
+                      <div>
+                        <button onClick={() => setSelectedTeam(null)} className="mb-4 text-green-600 font-medium">← Back to all fixtures</button>
+                        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+                          <h2 className="text-xl font-bold text-gray-900">{selectedTeam.name}</h2>
+                          <p className="text-gray-600">Club: {selectedTeam.club}</p>
+                          <p className="text-gray-600">{getTeamFixtures(selectedTeam.id).length} fixtures</p>
+                        </div>
+                        <div className="space-y-3">
+                          {getTeamFixtures(selectedTeam.id).map((fixture, idx) => {
+                            const opponent = fixture.team1.id === selectedTeam.id ? fixture.team2 : fixture.team1;
+                            return (
+                              <div key={fixture.id} className="bg-white rounded-lg shadow p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-2xl font-bold text-green-600">{fixture.time}</span>
+                                  <span className="text-lg font-medium text-gray-700">Match {idx + 1}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <MapPin size={18} className="text-gray-500" />
+                                  <span className="font-medium text-gray-900">Pitch {fixture.pitch}</span>
+                                </div>
+                                <div className="text-gray-700">
+                                  <span className="font-medium">vs</span> {opponent.name}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {getCurrentAndNext().current.length > 0 && (
+                          <div className="mb-6">
+                            <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
+                              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                              Playing Now
+                            </h2>
+                            <div className="space-y-3">
+                              {getCurrentAndNext().current.map(f => (
+                                <div key={f.id} className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-red-500">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xl font-bold text-gray-900">{f.time}</span>
+                                    <span className="flex items-center gap-1 font-medium text-gray-700">
+                                      <MapPin size={16} />
+                                      Pitch {f.pitch}
+                                    </span>
+                                  </div>
+                                  <div className="text-gray-900">
+                                    <div className="font-medium">{f.team1.name}</div>
+                                    <div className="text-gray-500 text-sm my-1">vs</div>
+                                    <div className="font-medium">{f.team2.name}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {getCurrentAndNext().upcoming.length > 0 && (
+                          <div>
+                            <h2 className="text-xl font-bold text-gray-900 mb-3">Up Next</h2>
+                            <div className="space-y-3">
+                              {getCurrentAndNext().upcoming.map(f => (
+                                <div key={f.id} className="bg-white rounded-lg shadow p-4">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xl font-bold text-green-600">{f.time}</span>
+                                    <span className="flex items-center gap-1 font-medium text-gray-700">
+                                      <MapPin size={16} />
+                                      Pitch {f.pitch}
+                                    </span>
+                                  </div>
+                                  <div className="text-gray-900 text-sm">
+                                    <div>{f.team1.name}</div>
+                                    <div className="text-gray-500 my-1">vs</div>
+                                    <div>{f.team2.name}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
               )}
             </div>
-          </div>
-        );
-      }
+          );
+        };
 
-      const { current, upcoming } = getCurrentAndNext();
-      const teamFixtures = selectedTeam ? getTeamFixtures(selectedTeam.id) : [];
-
-      return (
-        <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-          <div className="bg-green-600 text-white p-4 sticky top-0 z-10 shadow-lg">
-            <div className="max-w-2xl mx-auto">
-              <div className="flex items-center justify-between mb-3">
-                <h1 className="text-2xl font-bold">U7's Waterfall</h1>
-                <button
-                  onClick={() => setView('admin')}
-                  className="px-3 py-1 bg-white text-green-600 rounded-lg text-sm font-medium"
-                >
-                  Admin
-                </button>
-              </div>
-              
-              <div className="relative">
-                <Search className="absolute left-3 top-3 text-green-600" size={20} />
-                <input
-                  type="text"
-                  placeholder="Search for your team..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-lg text-gray-900 text-lg"
-                />
-              </div>
-
-              {searchTerm && (
-                <div className="mt-2 bg-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredTeams.map(team => (
-                    <button
-                      key={team.id}
-                      onClick={() => {
-                        setSelectedTeam(team);
-                        setSearchTerm('');
-                      }}
-                      className="w-full px-4 py-3 text-left hover:bg-green-50 border-b border-gray-100 text-gray-900"
-                    >
-                      <div className="font-medium">{team.name}</div>
-                      <div className="text-sm text-gray-600">Club: {team.club}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="max-w-2xl mx-auto p-4">
-            {fixtures.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                <Calendar size={48} className="mx-auto text-gray-400 mb-4" />
-                <h2 className="text-xl font-bold text-gray-900 mb-2">No Fixtures Yet</h2>
-                <p className="text-gray-600">Fixtures will appear here once generated by the admin.</p>
-              </div>
-            ) : selectedTeam ? (
-              <div>
-                <button
-                  onClick={() => setSelectedTeam(null)}
-                  className="mb-4 text-green-600 font-medium"
-                >
-                  ← Back to all fixtures
-                </button>
-                
-                <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
-                  <h2 className="text-xl font-bold text-gray-900">{selectedTeam.name}</h2>
-                  <p className="text-gray-600">Club: {selectedTeam.club}</p>
-                  <p className="text-gray-600">{teamFixtures.length} fixtures</p>
-                </div>
-
-                <div className="space-y-3">
-                  {teamFixtures.map((fixture, idx) => {
-                    const opponent = fixture.team1.id === selectedTeam.id ? fixture.team2 : fixture.team1;
-                    
-                    return (
-                      <div key={fixture.id} className="bg-white rounded-lg shadow p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-2xl font-bold text-green-600">{fixture.time}</span>
-                          <span className="text-lg font-medium text-gray-700">Match {idx + 1}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <MapPin size={18} className="text-gray-500" />
-                          <span className="font-medium text-gray-900">Pitch {fixture.pitch}</span>
-                        </div>
-                        <div className="text-gray-700">
-                          <span className="font-medium">vs</span> {opponent.name}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <>
-                {current.length > 0 && (
-                  <div className="mb-6">
-                    <h2 className="text-xl font-bold text-gray-900 mb-3 flex items-center gap-2">
-                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                      Playing Now
-                    </h2>
-                    <div className="space-y-3">
-                      {current.map(f => (
-                        <div key={f.id} className="bg-white rounded-lg shadow-lg p-4 border-l-4 border-red-500">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xl font-bold text-gray-900">{f.time}</span>
-                            <span className="flex items-center gap-1 font-medium text-gray-700">
-                              <MapPin size={16} />
-                              Pitch {f.pitch}
-                            </span>
-                          </div>
-                          <div className="text-gray-900">
-                            <div className="font-medium">{f.team1.name}</div>
-                            <div className="text-gray-500 text-sm my-1">vs</div>
-                            <div className="font-medium">{f.team2.name}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {upcoming.length > 0 && (
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900 mb-3">Up Next</h2>
-                    <div className="space-y-3">
-                      {upcoming.map(f => (
-                        <div key={f.id} className="bg-white rounded-lg shadow p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xl font-bold text-green-600">{f.time}</span>
-                            <span className="flex items-center gap-1 font-medium text-gray-700">
-                              <MapPin size={16} />
-                              Pitch {f.pitch}
-                            </span>
-                          </div>
-                          <div className="text-gray-900 text-sm">
-                            <div>{f.team1.name}</div>
-                            <div className="text-gray-500 my-1">vs</div>
-                            <div>{f.team2.name}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      );
-    };
-
-    // Render the app
-    ReactDOM.render(<RugbyFixtureApp />, document.getElementById('root'));
-</script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<RugbyFixtureApp />);
+    </script>
+</body>
+</html>
