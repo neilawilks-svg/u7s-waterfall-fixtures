@@ -148,6 +148,7 @@
           const [view, setView] = useState(initialView);
           const [teams, setTeams] = useState([]);
           const [fixtures, setFixtures] = useState([]);
+          const [zones, setZones] = useState([]);
           const [searchTerm, setSearchTerm] = useState('');
           const [selectedTeam, setSelectedTeam] = useState(null);
           const [numPitches, setNumPitches] = useState(16);
@@ -187,6 +188,15 @@
                     }
                   });
                   setTeams(Array.from(teamMap.values()));
+
+                  if (data.zones && data.zones.length > 0) {
+                    const restoredZones = data.zones.map(z => ({
+                      id: z.id,
+                      pitches: z.pitches,
+                      teams: z.teamIds.map(id => teamMap.get(id)).filter(Boolean),
+                    }));
+                    setZones(restoredZones);
+                  }
                 }
               }
             } catch (error) {
@@ -194,12 +204,13 @@
             }
           };
 
-          const saveFixtures = async (fixtureData, teamData) => {
+          const saveFixtures = async (fixtureData, teamData, zoneData) => {
             try {
               console.log('Attempting to save fixtures...', fixtureData.length);
               const payload = {
                 fixtures: fixtureData,
                 teams: teamData,
+                zones: zoneData ? zoneData.map(z => ({ id: z.id, pitches: z.pitches, teamIds: z.teams.map(t => t.id) })) : [],
                 generated: new Date().toISOString()
               };
               console.log('Payload:', payload);
@@ -385,149 +396,284 @@
             return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
           };
 
+          const computePitchGrid = (totalPitches, numColumns = 4) => {
+            const pitchesPerColumn = Math.ceil(totalPitches / numColumns);
+            const positions = {};
+            let pitchNum = 1;
+            for (let col = 0; col < numColumns && pitchNum <= totalPitches; col++) {
+              for (let row = 0; row < pitchesPerColumn && pitchNum <= totalPitches; row++) {
+                const actualRow = (col % 2 === 0)
+                  ? (pitchesPerColumn - 1 - row)
+                  : row;
+                positions[pitchNum] = [actualRow, col];
+                pitchNum++;
+              }
+            }
+            return positions;
+          };
+
+          const computeZones = (totalPitches) => {
+            const numZones = Math.floor(totalPitches / 2);
+            const zoneLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const zoneList = [];
+            for (let z = 0; z < numZones; z++) {
+              zoneList.push({
+                id: zoneLabels[z],
+                pitches: [z * 2 + 1, z * 2 + 2],
+                teams: [],
+              });
+            }
+            return zoneList;
+          };
+
+          const computeZoneAdjacency = (zoneList, pitchGrid) => {
+            const zoneCenters = zoneList.map(z => {
+              const p1 = pitchGrid[z.pitches[0]] || [0, 0];
+              const p2 = pitchGrid[z.pitches[1]] || [0, 0];
+              return { id: z.id, row: (p1[0] + p2[0]) / 2, col: (p1[1] + p2[1]) / 2 };
+            });
+            const adjacencyMap = {};
+            zoneCenters.forEach(zc => {
+              adjacencyMap[zc.id] = zoneCenters
+                .filter(other => other.id !== zc.id)
+                .sort((a, b) => {
+                  const distA = Math.abs(a.row - zc.row) + Math.abs(a.col - zc.col);
+                  const distB = Math.abs(b.row - zc.row) + Math.abs(b.col - zc.col);
+                  return distA - distB;
+                })
+                .map(other => other.id);
+            });
+            return adjacencyMap;
+          };
+
+          const assignTeamsToZones = (teamList, zoneList) => {
+            const numZones = zoneList.length;
+            const maxPerZone = Math.ceil(teamList.length / numZones);
+            const clubGroups = {};
+            teamList.forEach(t => {
+              if (!clubGroups[t.club]) clubGroups[t.club] = [];
+              clubGroups[t.club].push(t);
+            });
+            const sortedClubs = Object.keys(clubGroups).sort(
+              (a, b) => clubGroups[b].length - clubGroups[a].length
+            );
+            zoneList.forEach(z => { z.teams = []; });
+            let globalOffset = 0;
+            sortedClubs.forEach(club => {
+              const clubTeams = clubGroups[club];
+              let zoneIdx = globalOffset;
+              clubTeams.forEach(team => {
+                let placed = false;
+                for (let attempt = 0; attempt < numZones; attempt++) {
+                  const candidateIdx = (zoneIdx + attempt) % numZones;
+                  if (zoneList[candidateIdx].teams.length < maxPerZone) {
+                    zoneList[candidateIdx].teams.push(team);
+                    team.zone = zoneList[candidateIdx].id;
+                    zoneIdx = (candidateIdx + 1) % numZones;
+                    placed = true;
+                    break;
+                  }
+                }
+                if (!placed) {
+                  const leastFull = zoneList.reduce((a, b) => a.teams.length <= b.teams.length ? a : b);
+                  leastFull.teams.push(team);
+                  team.zone = leastFull.id;
+                }
+              });
+              globalOffset = (globalOffset + 1) % numZones;
+            });
+            return zoneList;
+          };
+
+          const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, targetRounds, adjacency) => {
+            let bestMatch = null;
+            let bestScore = -Infinity;
+            for (let i = 0; i < candidates.length; i++) {
+              const t1 = candidates[i];
+              for (let j = i + 1; j < candidates.length; j++) {
+                const t2 = candidates[j];
+                const matchupKey = [t1.id, t2.id].sort().join('-');
+                if (t1.club === t2.club) continue;
+                if (playedMatchups.has(matchupKey)) continue;
+                const t1PlayedClub = clubMatchupsPerTeam[t1.id].has(t2.club);
+                const t2PlayedClub = clubMatchupsPerTeam[t2.id].has(t1.club);
+                let score = 1000;
+                if (!t1PlayedClub && !t2PlayedClub) score += 100;
+                else if (!t1PlayedClub || !t2PlayedClub) score += 50;
+                else score -= 100;
+                score += (targetRounds - teamFixtureCounts[t1.id]) * 20;
+                score += (targetRounds - teamFixtureCounts[t2.id]) * 20;
+                score += (10 - clubMatchupsPerTeam[t1.id].size) * 5;
+                score += (10 - clubMatchupsPerTeam[t2.id].size) * 5;
+                if (t1.zone && t2.zone) {
+                  if (t1.zone === t2.zone) {
+                    score += 200;
+                  } else if (adjacency && adjacency[t1.zone] && adjacency[t1.zone].indexOf(t2.zone) < 2) {
+                    score += 50;
+                  }
+                }
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestMatch = { t1, t2, matchupKey };
+                }
+              }
+            }
+            return bestMatch;
+          };
+
           const generateFixtures = async () => {
             setLoading(true);
             setError('');
-            
+
             try {
-              const teamList = teams.length > 0 ? teams : generateSampleTeams();
-              
+              const teamList = teams.length > 0 ? [...teams] : generateSampleTeams();
+
+              // Phase 0: Zone setup
+              const minTeamsPerZone = 3;
+              const maxZonesByPitches = Math.floor(numPitches / 2);
+              const maxZonesByTeams = Math.floor(teamList.length / minTeamsPerZone);
+              const activeZoneCount = Math.min(maxZonesByPitches, maxZonesByTeams);
+              const activePitchCount = activeZoneCount * 2;
+
+              const zoneList = computeZones(activePitchCount);
+              const pitchGrid = computePitchGrid(activePitchCount);
+              const adjacency = computeZoneAdjacency(zoneList, pitchGrid);
+              assignTeamsToZones(teamList, zoneList);
+
+              // Tracking structures
               const allFixtures = [];
               const teamFixtureCounts = {};
               const playedMatchups = new Set();
               const clubMatchupsPerTeam = {};
-              
+
               teamList.forEach(t => {
                 teamFixtureCounts[t.id] = 0;
                 clubMatchupsPerTeam[t.id] = new Set();
               });
-              
+
               let totalRounds = 0;
               const maxRounds = numRounds * 3;
               let currentTime = startTime;
-              
+
+              const recordMatch = (t1, t2, matchupKey, usedSet) => {
+                playedMatchups.add(matchupKey);
+                teamFixtureCounts[t1.id]++;
+                teamFixtureCounts[t2.id]++;
+                usedSet.add(t1.id);
+                usedSet.add(t2.id);
+                clubMatchupsPerTeam[t1.id].add(t2.club);
+                clubMatchupsPerTeam[t2.id].add(t1.club);
+              };
+
+              // Phase 1 & 2: Round-by-round generation
               while (totalRounds < maxRounds) {
+                const teamsNeedingMatches = teamList.filter(t => teamFixtureCounts[t.id] < numRounds);
+                if (teamsNeedingMatches.length === 0) break;
+
                 const usedTeamsThisRound = new Set();
                 const roundFixtures = [];
-                let pitchNum = 1;
-                
-                const teamsNeedingMatches = teamList.filter(t => teamFixtureCounts[t.id] < numRounds);
-                
-                if (teamsNeedingMatches.length === 0) {
-                  break;
-                }
-                
-                let attempts = 0;
-                const maxAttemptsPerRound = 1000;
-                
-                while (attempts < maxAttemptsPerRound && pitchNum <= numPitches) {
-                  attempts++;
-                  
-                  const availableTeams = teamsNeedingMatches.filter(t => !usedTeamsThisRound.has(t.id));
-                  
-                  if (availableTeams.length < 2) break;
-                  
-                  let bestMatch = null;
-                  let bestScore = -Infinity;
-                  
-                  for (let i = 0; i < availableTeams.length; i++) {
-                    const t1 = availableTeams[i];
-                    
-                    for (let j = i + 1; j < availableTeams.length; j++) {
-                      const t2 = availableTeams[j];
-                      
-                      const matchupKey = [t1.id, t2.id].sort().join('-');
-                      const sameClub = t1.club === t2.club;
-                      const alreadyPlayed = playedMatchups.has(matchupKey);
-                      
-                      if (sameClub || alreadyPlayed) continue;
-                      
-                      const t1PlayedClub = clubMatchupsPerTeam[t1.id].has(t2.club);
-                      const t2PlayedClub = clubMatchupsPerTeam[t2.id].has(t1.club);
-                      
-                      let score = 1000;
-                      
-                      if (!t1PlayedClub && !t2PlayedClub) {
-                        score += 100;
-                      } else if (!t1PlayedClub || !t2PlayedClub) {
-                        score += 50;
-                      } else {
-                        score -= 100;
-                      }
-                      
-                      score += (numRounds - teamFixtureCounts[t1.id]) * 20;
-                      score += (numRounds - teamFixtureCounts[t2.id]) * 20;
-                      
-                      score += (10 - clubMatchupsPerTeam[t1.id].size) * 5;
-                      score += (10 - clubMatchupsPerTeam[t2.id].size) * 5;
-                      
-                      if (score > bestScore) {
-                        bestScore = score;
-                        bestMatch = { t1, t2, matchupKey };
-                      }
-                    }
-                  }
-                  
-                  if (bestMatch) {
-                    const { t1, t2, matchupKey } = bestMatch;
-                    
-                    const fixtureTime = currentTime;
-                    
+                const filledPitches = new Set();
+
+                // Phase 1: Intra-zone matches
+                for (const zone of zoneList) {
+                  for (let pitchSlot = 0; pitchSlot < 2; pitchSlot++) {
+                    const pitch = zone.pitches[pitchSlot];
+                    const availableInZone = zone.teams.filter(
+                      t => !usedTeamsThisRound.has(t.id) && teamFixtureCounts[t.id] < numRounds
+                    );
+                    if (availableInZone.length < 2) break;
+
+                    const match = findBestMatch(availableInZone, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+                    if (!match) break;
+
+                    const { t1, t2, matchupKey } = match;
                     roundFixtures.push({
-                      id: `fixture-${totalRounds}-${pitchNum}`,
+                      id: `fixture-${totalRounds}-${pitch}`,
                       round: totalRounds + 1,
-                      pitch: pitchNum,
-                      time: fixtureTime,
+                      pitch,
+                      time: currentTime,
                       team1: t1,
-                      team2: t2
+                      team2: t2,
+                      zone: zone.id,
+                      isCrossZone: false,
                     });
-                    
-                    playedMatchups.add(matchupKey);
-                    teamFixtureCounts[t1.id]++;
-                    teamFixtureCounts[t2.id]++;
-                    usedTeamsThisRound.add(t1.id);
-                    usedTeamsThisRound.add(t2.id);
-                    
-                    clubMatchupsPerTeam[t1.id].add(t2.club);
-                    clubMatchupsPerTeam[t2.id].add(t1.club);
-                    
-                    pitchNum++;
-                    attempts = 0;
-                  } else {
-                    break;
+                    recordMatch(t1, t2, matchupKey, usedTeamsThisRound);
+                    filledPitches.add(pitch);
                   }
                 }
-                
+
+                // Phase 2: Cross-zone backfill for unfilled pitch slots
+                for (const zone of zoneList) {
+                  for (const pitch of zone.pitches) {
+                    if (filledPitches.has(pitch)) continue;
+
+                    // Gather candidates from all zones, ordered by proximity to this zone
+                    const zoneOrder = [zone.id, ...(adjacency[zone.id] || [])];
+                    const candidates = [];
+                    for (const zId of zoneOrder) {
+                      const z = zoneList.find(zz => zz.id === zId);
+                      if (!z) continue;
+                      z.teams.forEach(t => {
+                        if (!usedTeamsThisRound.has(t.id) && teamFixtureCounts[t.id] < numRounds) {
+                          candidates.push(t);
+                        }
+                      });
+                    }
+                    if (candidates.length < 2) continue;
+
+                    const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+                    if (!match) continue;
+
+                    const { t1, t2, matchupKey } = match;
+                    roundFixtures.push({
+                      id: `fixture-${totalRounds}-${pitch}`,
+                      round: totalRounds + 1,
+                      pitch,
+                      time: currentTime,
+                      team1: t1,
+                      team2: t2,
+                      zone: zone.id,
+                      isCrossZone: t1.zone !== t2.zone,
+                    });
+                    recordMatch(t1, t2, matchupKey, usedTeamsThisRound);
+                    filledPitches.add(pitch);
+                  }
+                }
+
                 if (roundFixtures.length > 0) {
                   allFixtures.push(...roundFixtures);
                 } else {
                   break;
                 }
-                
+
                 totalRounds++;
-                
                 let nextTime = addMinutes(currentTime, matchDuration);
                 currentTime = getNextAvailableTime(nextTime);
               }
-              
+
               if (allFixtures.length === 0) {
                 setError('Failed to generate fixtures. Try adjusting the number of pitches or rounds.');
               } else {
                 setFixtures(allFixtures);
                 setTeams(teamList);
-                await saveFixtures(allFixtures, teamList);
-                
+                setZones(zoneList);
+                await saveFixtures(allFixtures, teamList, zoneList);
+
                 const fixtureCounts = Object.values(teamFixtureCounts);
                 const minFixtures = Math.min(...fixtureCounts);
                 const maxFixtures = Math.max(...fixtureCounts);
                 const avgFixtures = (fixtureCounts.reduce((a, b) => a + b, 0) / fixtureCounts.length).toFixed(1);
-                
                 const teamsWithTarget = fixtureCounts.filter(c => c === numRounds).length;
-                
-                let summary = `Generated ${allFixtures.length} fixtures across ${totalRounds} rounds. `;
+
+                const intraZoneCount = allFixtures.filter(f => !f.isCrossZone).length;
+                const crossZoneCount = allFixtures.filter(f => f.isCrossZone).length;
+                const intraPercent = allFixtures.length > 0 ? Math.round(intraZoneCount / allFixtures.length * 100) : 0;
+
+                let summary = `Generated ${allFixtures.length} fixtures across ${totalRounds} rounds in ${zoneList.length} zones. `;
                 summary += `Teams have ${minFixtures}-${maxFixtures} matches (avg: ${avgFixtures}). `;
-                summary += `${teamsWithTarget}/${teamList.length} teams have exactly ${numRounds} matches.`;
-                
+                summary += `${teamsWithTarget}/${teamList.length} teams have exactly ${numRounds} matches. `;
+                summary += `${intraPercent}% intra-zone, ${100 - intraPercent}% cross-zone.`;
+
                 setError(summary);
                 console.log(summary);
               }
@@ -535,7 +681,7 @@
               setError('Error generating fixtures: ' + err.message);
               console.error(err);
             }
-            
+
             setLoading(false);
           };
 
@@ -575,57 +721,58 @@
 
               const wb = window.XLSX.utils.book_new();
 
-              const fixtureData = [['Round', 'Time', 'Pitch', 'Team 1', 'Team 2', 'Club 1', 'Club 2']];
+              const fixtureData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2', 'Club 1', 'Club 2', 'Cross-Zone']];
               fixtures.forEach(f => {
-                fixtureData.push([f.round, f.time, f.pitch, f.team1.name, f.team2.name, f.team1.club, f.team2.club]);
+                fixtureData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name, f.team1.club, f.team2.club, f.isCrossZone ? 'Yes' : '']);
               });
               const wsFixtures = window.XLSX.utils.aoa_to_sheet(fixtureData);
               window.XLSX.utils.book_append_sheet(wb, wsFixtures, 'All Fixtures');
 
-              const teamData = [['Team', 'Club', 'Round', 'Time', 'Pitch', 'Opponent', 'Opponent Club']];
+              const teamData = [['Team', 'Club', 'Home Zone', 'Round', 'Time', 'Pitch', 'Zone', 'Opponent', 'Opponent Club']];
               teams.forEach(team => {
                 const teamFixtures = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id)
                   .sort((a, b) => a.time.localeCompare(b.time));
                 teamFixtures.forEach(f => {
                   const opponent = f.team1.id === team.id ? f.team2 : f.team1;
-                  teamData.push([team.name, team.club, f.round, f.time, f.pitch, opponent.name, opponent.club]);
+                  teamData.push([team.name, team.club, team.zone || '', f.round, f.time, f.pitch, f.zone || '', opponent.name, opponent.club]);
                 });
               });
               const wsTeams = window.XLSX.utils.aoa_to_sheet(teamData);
               window.XLSX.utils.book_append_sheet(wb, wsTeams, 'By Team');
 
               const rounds = [...new Set(fixtures.map(f => f.round))].sort((a, b) => a - b);
-              const roundData = [['Round', 'Time', 'Pitch', 'Team 1', 'Team 2']];
+              const roundData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2']];
               rounds.forEach(round => {
                 const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
                 roundFixtures.forEach(f => {
-                  roundData.push([f.round, f.time, f.pitch, f.team1.name, f.team2.name]);
+                  roundData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name]);
                 });
                 if (round < rounds.length) {
-                  roundData.push(['', '', '', '', '']);
+                  roundData.push(['', '', '', '', '', '']);
                 }
               });
               const wsRounds = window.XLSX.utils.aoa_to_sheet(roundData);
               window.XLSX.utils.book_append_sheet(wb, wsRounds, 'By Round');
 
               const pitches = [...new Set(fixtures.map(f => f.pitch))].sort((a, b) => a - b);
-              const pitchData = [['Pitch', 'Time', 'Round', 'Team 1', 'Team 2']];
+              const pitchData = [['Pitch', 'Zone', 'Time', 'Round', 'Team 1', 'Team 2']];
               pitches.forEach(pitch => {
                 const pitchFixtures = fixtures.filter(f => f.pitch === pitch).sort((a, b) => a.time.localeCompare(b.time));
+                const pitchZone = zones.find(z => z.pitches.includes(pitch));
                 pitchFixtures.forEach(f => {
-                  pitchData.push([f.pitch, f.time, f.round, f.team1.name, f.team2.name]);
+                  pitchData.push([f.pitch, pitchZone ? pitchZone.id : '', f.time, f.round, f.team1.name, f.team2.name]);
                 });
                 if (pitch < pitches.length) {
-                  pitchData.push(['', '', '', '', '']);
+                  pitchData.push(['', '', '', '', '', '']);
                 }
               });
               const wsPitches = window.XLSX.utils.aoa_to_sheet(pitchData);
               window.XLSX.utils.book_append_sheet(wb, wsPitches, 'By Pitch');
 
               const allTimes = [...new Set(fixtures.map(f => f.time))].sort();
-              const matrixData = [['Team', ...allTimes]];
+              const matrixData = [['Team', 'Zone', ...allTimes]];
               teams.forEach(team => {
-                const row = [team.name];
+                const row = [team.name, team.zone || ''];
                 allTimes.forEach(time => {
                   const fixture = fixtures.find(f => f.time === time && (f.team1.id === team.id || f.team2.id === team.id));
                   if (fixture) {
@@ -639,6 +786,27 @@
               });
               const wsMatrix = window.XLSX.utils.aoa_to_sheet(matrixData);
               window.XLSX.utils.book_append_sheet(wb, wsMatrix, 'Team Schedule Matrix');
+
+              if (zones.length > 0) {
+                const zoneSheetData = [['Zone', 'Pitches', 'Teams', 'Team Names', 'Clubs Represented', 'Intra-Zone Matches', 'Cross-Zone Matches']];
+                zones.forEach(zone => {
+                  const zoneFixtures = fixtures.filter(f => f.zone === zone.id);
+                  const intraCount = zoneFixtures.filter(f => !f.isCrossZone).length;
+                  const crossCount = zoneFixtures.filter(f => f.isCrossZone).length;
+                  const clubs = [...new Set(zone.teams.map(t => t.club))];
+                  zoneSheetData.push([
+                    zone.id,
+                    zone.pitches.join(', '),
+                    zone.teams.length,
+                    zone.teams.map(t => t.name).join(', '),
+                    clubs.join(', '),
+                    intraCount,
+                    crossCount,
+                  ]);
+                });
+                const wsZones = window.XLSX.utils.aoa_to_sheet(zoneSheetData);
+                window.XLSX.utils.book_append_sheet(wb, wsZones, 'Zone Summary');
+              }
 
               window.XLSX.writeFile(wb, 'Rugby_Festival_Fixtures.xlsx');
             } catch (err) {
@@ -776,6 +944,70 @@
                       {loading ? 'Generating...' : 'Generate Fixtures'}
                     </button>
                   </div>
+                  {zones.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                      <h2 className="text-2xl font-bold text-gray-900 mb-4">Pitch Layout & Zones</h2>
+                      {(() => {
+                        const zoneColors = {
+                          A: 'bg-red-100 border-red-400 text-red-800',
+                          B: 'bg-blue-100 border-blue-400 text-blue-800',
+                          C: 'bg-green-100 border-green-400 text-green-800',
+                          D: 'bg-yellow-100 border-yellow-400 text-yellow-800',
+                          E: 'bg-purple-100 border-purple-400 text-purple-800',
+                          F: 'bg-pink-100 border-pink-400 text-pink-800',
+                          G: 'bg-indigo-100 border-indigo-400 text-indigo-800',
+                          H: 'bg-orange-100 border-orange-400 text-orange-800',
+                        };
+                        const activePitchCount = zones.length * 2;
+                        const grid = computePitchGrid(activePitchCount);
+                        const numCols = Math.min(4, Math.ceil(activePitchCount / 4) > 0 ? 4 : 2);
+                        const numRows = Math.ceil(activePitchCount / numCols);
+                        const pitchToZone = {};
+                        zones.forEach(z => { z.pitches.forEach(p => { pitchToZone[p] = z.id; }); });
+                        const gridCells = [];
+                        for (let r = 0; r < numRows; r++) {
+                          for (let c = 0; c < numCols; c++) {
+                            const entry = Object.entries(grid).find(([_, pos]) => pos[0] === r && pos[1] === c);
+                            gridCells.push(entry ? { pitch: parseInt(entry[0]), row: r, col: c } : null);
+                          }
+                        }
+                        return (
+                          <div>
+                            <div className="inline-grid gap-2 mb-6" style={{ gridTemplateColumns: `repeat(${numCols}, 1fr)` }}>
+                              {gridCells.map((cell, idx) => {
+                                if (!cell) return <div key={idx}></div>;
+                                const zId = pitchToZone[cell.pitch];
+                                const colorClass = zoneColors[zId] || 'bg-gray-100 border-gray-300 text-gray-700';
+                                return (
+                                  <div key={idx} className={`${colorClass} border-2 rounded-lg p-3 text-center min-w-[80px]`}>
+                                    <div className="text-lg font-bold">P{cell.pitch}</div>
+                                    <div className="text-xs font-medium">Zone {zId}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-3">Zone Assignments</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              {zones.map(zone => {
+                                const colorClass = zoneColors[zone.id] || 'bg-gray-100 border-gray-300';
+                                return (
+                                  <div key={zone.id} className={`${colorClass} border-2 rounded-lg p-3`}>
+                                    <h4 className="font-bold text-lg">Zone {zone.id}</h4>
+                                    <p className="text-sm mb-2">Pitches {zone.pitches.join(' & ')}</p>
+                                    <ul className="text-sm space-y-1">
+                                      {zone.teams.map(t => (
+                                        <li key={t.id}>{t.name} <span className="opacity-60">({t.club})</span></li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                   {fixtures.length > 0 && (
                     <div className="bg-white rounded-lg shadow-lg p-6">
                       <div className="flex items-center justify-between mb-4">
@@ -794,6 +1026,7 @@
                             <tr>
                               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
                               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Pitch</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zone</th>
                               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 1</th>
                               <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 2</th>
                             </tr>
@@ -803,13 +1036,16 @@
                               <tr key={f.id} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 text-sm">{f.time}</td>
                                 <td className="px-4 py-3 text-sm font-medium">Pitch {f.pitch}</td>
+                                <td className="px-4 py-3 text-sm">
+                                  {f.zone && <span className={f.isCrossZone ? 'text-amber-600 font-medium' : 'font-medium'}>Zone {f.zone}{f.isCrossZone ? ' *' : ''}</span>}
+                                </td>
                                 <td className="px-4 py-3 text-sm">{f.team1.name}</td>
                                 <td className="px-4 py-3 text-sm">{f.team2.name}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {fixtures.length > 30 && <p className="text-center text-gray-500 mt-4">Showing 30 of {fixtures.length} fixtures</p>}
+                        {fixtures.length > 30 && <p className="text-center text-gray-500 mt-4">Showing 30 of {fixtures.length} fixtures. * = cross-zone match</p>}
                       </div>
                     </div>
                   )}
@@ -837,6 +1073,7 @@
                         <button key={team.id} onClick={() => { setSelectedTeam(team); setSearchTerm(''); }} className="w-full px-4 py-3 text-left hover:bg-[#7c1229]/5 border-b border-gray-100 text-gray-900">
                           <div className="font-medium">{team.name}</div>
                           <div className="text-sm text-gray-600">Club: {team.club}</div>
+                          {team.zone && <div className="text-sm text-[#7c1229] font-medium">Zone {team.zone}</div>}
                         </button>
                       ))}
                     </div>
@@ -856,6 +1093,11 @@
                     <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
                       <h2 className="text-xl font-bold text-gray-900">{selectedTeam.name}</h2>
                       <p className="text-gray-600">Club: {selectedTeam.club}</p>
+                      {selectedTeam.zone && (
+                        <p className="text-[#7c1229] font-semibold text-lg">
+                          Zone {selectedTeam.zone} (Pitches {zones.find(z => z.id === selectedTeam.zone)?.pitches.join(' & ')})
+                        </p>
+                      )}
                       <p className="text-gray-600">{teamFixtures.length} fixtures</p>
                     </div>
                     <div className="space-y-3">
@@ -870,6 +1112,11 @@
                             <div className="flex items-center gap-2 mb-2">
                               <MapPin size={18} className="text-gray-500" />
                               <span className="font-medium text-gray-900">Pitch {fixture.pitch}</span>
+                              {fixture.zone && (
+                                <span className="px-2 py-0.5 bg-[#7c1229]/10 text-[#7c1229] rounded text-xs font-medium">
+                                  Zone {fixture.zone}{fixture.isCrossZone ? ' (away)' : ''}
+                                </span>
+                              )}
                             </div>
                             <div className="text-gray-700">
                               <span className="font-medium">vs</span> {opponent.name}
@@ -895,6 +1142,7 @@
                                 <span className="flex items-center gap-1 font-medium text-gray-700">
                                   <MapPin size={16} />
                                   Pitch {f.pitch}
+                                  {f.zone && <span className="text-xs text-[#7c1229] ml-1">(Zone {f.zone})</span>}
                                 </span>
                               </div>
                               <div className="text-gray-900">
@@ -918,6 +1166,7 @@
                                 <span className="flex items-center gap-1 font-medium text-gray-700">
                                   <MapPin size={16} />
                                   Pitch {f.pitch}
+                                  {f.zone && <span className="text-xs text-[#7c1229] ml-1">(Zone {f.zone})</span>}
                                 </span>
                               </div>
                               <div className="text-gray-900 text-sm">
