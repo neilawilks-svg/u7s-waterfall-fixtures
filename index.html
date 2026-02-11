@@ -85,10 +85,15 @@
 
        const STORAGE_API = 'https://script.google.com/macros/s/AKfycbznHgt_8TLGaPaqnWzv_PFMkmeQB5YCM2UC1NtSgf51_AZaA3UJyoRD7U3KpEIiypk4/exec';
 
+        const STORAGE_API = 'https://script.google.com/macros/s/AKfycbznHgt_8TLGaPaqnWzv_PFMkmeQB5YCM2UC1NtSgf51_AZaA3UJyoRD7U3KpEIiypk4/exec';
+
         window.storage = {
             get: async function(key) {
                 try {
-                    const response = await fetch(STORAGE_API);
+                    const response = await fetch(STORAGE_API, {
+                        method: 'GET',
+                        redirect: 'follow'
+                    });
                     if (!response.ok) return null;
                     const data = await response.json();
                     return { key, value: JSON.stringify(data) };
@@ -99,13 +104,23 @@
             },
             set: async function(key, value) {
                 try {
+                    console.log('Sending POST to:', STORAGE_API);
                     const data = JSON.parse(value);
+                    console.log('Data to send:', data);
+                    
                     const response = await fetch(STORAGE_API, {
                         method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify(data),
-                        headers: { 'Content-Type': 'application/json' }
+                        redirect: 'follow'
                     });
-                    if (!response.ok) return null;
+                    
+                    console.log('POST response status:', response.status);
+                    
+                    // With no-cors, we can't read the response, but if we got here, it was sent
                     return { key, value };
                 } catch (err) {
                     console.error('Error saving fixtures:', err);
@@ -116,7 +131,6 @@
                 return { key, deleted: true };
             }
         };
-
         const RugbyFixtureApp = () => {
           const urlParams = new URLSearchParams(window.location.search);
           const initialView = urlParams.get('view') === 'public' ? 'public' : 'admin';
@@ -867,4 +881,5 @@
     </script>
 </body>
 </html>
+
 
