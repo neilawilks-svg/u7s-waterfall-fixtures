@@ -29,6 +29,22 @@
         .animate-pulse {
             animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
+
+        @media print {
+            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .print-page-break { page-break-after: always; }
+            .print-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+            .print-table th, .print-table td { border: 1px solid #333; padding: 4px 6px; text-align: left; }
+            .print-table th { background: #333 !important; color: #fff !important; font-weight: bold; }
+            .print-table tr:nth-child(even) { background: #f0f0f0 !important; }
+            .print-header { text-align: center; margin-bottom: 10px; }
+            .print-header h1 { font-size: 18pt; margin: 0; }
+            .print-header p { font-size: 10pt; margin: 2px 0; color: #666; }
+        }
+
+        .print-only { display: none; }
     </style>
 </head>
 <body>
@@ -165,10 +181,25 @@
           const [lunchEnd, setLunchEnd] = useState('12:30');
           const [isAuthenticated, setIsAuthenticated] = useState(false);
           const [passwordInput, setPasswordInput] = useState('');
+          const [refreshTick, setRefreshTick] = useState(0);
+          const [fixtureHistory, setFixtureHistory] = useState([]);
+          const [swapMode, setSwapMode] = useState(null);
+          const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+          const [notifiedFixtures, setNotifiedFixtures] = useState(new Set());
 
           useEffect(() => {
             loadFixtures();
           }, []);
+
+          // Auto-refresh public view every 60 seconds
+          useEffect(() => {
+            if (view !== 'public') return;
+            const interval = setInterval(() => {
+              setRefreshTick(t => t + 1);
+              loadFixtures();
+            }, 60000);
+            return () => clearInterval(interval);
+          }, [view]);
 
           const loadFixtures = async () => {
             try {
@@ -204,8 +235,22 @@
             }
           };
 
-          const saveFixtures = async (fixtureData, teamData, zoneData) => {
+          const saveFixtures = async (fixtureData, teamData, zoneData, skipHistory = false) => {
             try {
+              // Save current state to history before overwriting (max 10 entries)
+              if (!skipHistory && fixtures.length > 0) {
+                setFixtureHistory(prev => {
+                  const entry = {
+                    fixtures: [...fixtures],
+                    teams: [...teams],
+                    zones: [...zones],
+                    timestamp: new Date().toISOString(),
+                  };
+                  const next = [entry, ...prev].slice(0, 10);
+                  return next;
+                });
+              }
+
               console.log('Attempting to save fixtures...', fixtureData.length);
               const payload = {
                 fixtures: fixtureData,
@@ -214,10 +259,10 @@
                 generated: new Date().toISOString()
               };
               console.log('Payload:', payload);
-              
+
               const result = await window.storage.set('rugby-fixtures', JSON.stringify(payload));
               console.log('Save result:', result);
-              
+
               if (!result) {
                 console.error('Failed to save - no result returned');
               } else {
@@ -226,6 +271,139 @@
             } catch (error) {
               console.error('Error saving fixtures:', error);
             }
+          };
+
+          const restoreFromHistory = async (index) => {
+            const entry = fixtureHistory[index];
+            if (!entry) return;
+            setFixtures(entry.fixtures);
+            setTeams(entry.teams);
+            setZones(entry.zones);
+            await saveFixtures(entry.fixtures, entry.teams, entry.zones, true);
+            setFixtureHistory(prev => prev.filter((_, i) => i !== index));
+            setError(`Restored fixtures from ${new Date(entry.timestamp).toLocaleTimeString()}`);
+          };
+
+          const swapTeamsInFixture = async (fixtureId, newTeamId) => {
+            if (!swapMode) return;
+            const { fixtureId: srcFixtureId, slot: srcSlot } = swapMode;
+
+            const srcFixture = fixtures.find(f => f.id === srcFixtureId);
+            const destFixture = fixtures.find(f => f.id === fixtureId);
+            if (!srcFixture || !destFixture) return;
+
+            const srcTeam = srcSlot === 1 ? srcFixture.team1 : srcFixture.team2;
+            const destTeam = destFixture.team1.id === newTeamId ? destFixture.team1 : destFixture.team2;
+            const destSlot = destFixture.team1.id === newTeamId ? 1 : 2;
+
+            const updated = fixtures.map(f => {
+              if (f.id === srcFixtureId) {
+                return { ...f, [srcSlot === 1 ? 'team1' : 'team2']: destTeam };
+              }
+              if (f.id === fixtureId) {
+                return { ...f, [destSlot === 1 ? 'team1' : 'team2']: srcTeam };
+              }
+              return f;
+            });
+
+            setFixtures(updated);
+            await saveFixtures(updated, teams, zones);
+            setSwapMode(null);
+            setError(`Swapped ${srcTeam.name} with ${destTeam.name}`);
+          };
+
+          const regenerateRound = async (roundNum) => {
+            setLoading(true);
+            try {
+              const roundFixtures = fixtures.filter(f => f.round === roundNum);
+              const otherFixtures = fixtures.filter(f => f.round !== roundNum);
+
+              // Build tracking from other rounds only
+              const playedMatchups = new Set();
+              const clubMatchupsPerTeam = {};
+              const teamFixtureCounts = {};
+              teams.forEach(t => {
+                teamFixtureCounts[t.id] = 0;
+                clubMatchupsPerTeam[t.id] = new Set();
+              });
+              otherFixtures.forEach(f => {
+                const key = [f.team1.id, f.team2.id].sort().join('-');
+                playedMatchups.add(key);
+                teamFixtureCounts[f.team1.id] = (teamFixtureCounts[f.team1.id] || 0) + 1;
+                teamFixtureCounts[f.team2.id] = (teamFixtureCounts[f.team2.id] || 0) + 1;
+                clubMatchupsPerTeam[f.team1.id].add(f.team2.club);
+                clubMatchupsPerTeam[f.team2.id].add(f.team1.club);
+              });
+
+              const activePitchCount = zones.length * 2;
+              const pitchGrid = computePitchGrid(activePitchCount);
+              const adjacency = computeZoneAdjacency(zones, pitchGrid);
+
+              const roundTime = roundFixtures[0]?.time || startTime;
+              const usedTeams = new Set();
+              const newRoundFixtures = [];
+              const filledPitches = new Set();
+
+              // Intra-zone
+              for (const zone of zones) {
+                for (let pitchSlot = 0; pitchSlot < 2; pitchSlot++) {
+                  const pitch = zone.pitches[pitchSlot];
+                  const available = zone.teams.filter(t => !usedTeams.has(t.id) && teamFixtureCounts[t.id] < numRounds);
+                  if (available.length < 2) break;
+                  const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+                  if (!match) break;
+                  newRoundFixtures.push({
+                    id: `fixture-${roundNum - 1}-${pitch}`,
+                    round: roundNum, pitch, time: roundTime,
+                    team1: match.t1, team2: match.t2,
+                    zone: zone.id, isCrossZone: false,
+                  });
+                  playedMatchups.add(match.matchupKey);
+                  usedTeams.add(match.t1.id);
+                  usedTeams.add(match.t2.id);
+                  filledPitches.add(pitch);
+                }
+              }
+
+              // Cross-zone backfill
+              for (const zone of zones) {
+                for (const pitch of zone.pitches) {
+                  if (filledPitches.has(pitch)) continue;
+                  const zoneOrder = [zone.id, ...(adjacency[zone.id] || [])];
+                  const candidates = [];
+                  for (const zId of zoneOrder) {
+                    const z = zones.find(zz => zz.id === zId);
+                    if (!z) continue;
+                    z.teams.forEach(t => {
+                      if (!usedTeams.has(t.id) && teamFixtureCounts[t.id] < numRounds) candidates.push(t);
+                    });
+                  }
+                  if (candidates.length < 2) continue;
+                  const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+                  if (!match) continue;
+                  newRoundFixtures.push({
+                    id: `fixture-${roundNum - 1}-${pitch}`,
+                    round: roundNum, pitch, time: roundTime,
+                    team1: match.t1, team2: match.t2,
+                    zone: zone.id, isCrossZone: match.t1.zone !== match.t2.zone,
+                  });
+                  playedMatchups.add(match.matchupKey);
+                  usedTeams.add(match.t1.id);
+                  usedTeams.add(match.t2.id);
+                  filledPitches.add(pitch);
+                }
+              }
+
+              const allFixtures = [...otherFixtures, ...newRoundFixtures].sort((a, b) =>
+                a.time.localeCompare(b.time) || a.pitch - b.pitch
+              );
+              setFixtures(allFixtures);
+              await saveFixtures(allFixtures, teams, zones);
+              setError(`Re-generated round ${roundNum} with ${newRoundFixtures.length} fixtures`);
+            } catch (err) {
+              setError('Error re-generating round: ' + err.message);
+            }
+            setLoading(false);
           };
             const loadTeamsFromCSV = (csvText) => {
             const lines = csvText.split('\n');
@@ -685,7 +863,44 @@
             setLoading(false);
           };
 
-          const filteredTeams = teams.filter(t => 
+          // Push notifications: alert 2 minutes before a match starts
+          useEffect(() => {
+            if (!notificationsEnabled || !selectedTeam || view !== 'public') return;
+            const interval = setInterval(() => {
+              const now = new Date();
+              const currentMins = now.getHours() * 60 + now.getMinutes();
+              const teamFix = fixtures.filter(f => f.team1.id === selectedTeam.id || f.team2.id === selectedTeam.id);
+              teamFix.forEach(f => {
+                const [h, m] = f.time.split(':').map(Number);
+                const fixMins = h * 60 + m;
+                const diff = fixMins - currentMins;
+                if (diff >= 0 && diff <= 2 && !notifiedFixtures.has(f.id)) {
+                  const opponent = f.team1.id === selectedTeam.id ? f.team2 : f.team1;
+                  new Notification('Match Starting Soon!', {
+                    body: `${selectedTeam.name} vs ${opponent.name} on Pitch ${f.pitch} at ${f.time}`,
+                    icon: '🏉',
+                    tag: f.id,
+                  });
+                  setNotifiedFixtures(prev => new Set([...prev, f.id]));
+                }
+              });
+            }, 30000);
+            return () => clearInterval(interval);
+          }, [notificationsEnabled, selectedTeam, fixtures, view, notifiedFixtures]);
+
+          const enableNotifications = async () => {
+            if (!('Notification' in window)) {
+              alert('Notifications are not supported in this browser');
+              return;
+            }
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+              setNotificationsEnabled(true);
+              new Notification('Notifications Enabled', { body: "You'll be notified 2 minutes before your team's matches." });
+            }
+          };
+
+          const filteredTeams = teams.filter(t =>
             t.name.toLowerCase().includes(searchTerm.toLowerCase())
           );
 
@@ -820,6 +1035,72 @@
               setError('Error generating Excel file: ' + err.message);
               console.error(err);
             }
+          };
+
+          const printFixtures = (mode) => {
+            const printWindow = window.open('', '_blank');
+            const rounds = [...new Set(fixtures.map(f => f.round))].sort((a, b) => a - b);
+            const pitches = [...new Set(fixtures.map(f => f.pitch))].sort((a, b) => a - b);
+            let html = `<!DOCTYPE html><html><head><title>Rugby Fixtures - Print</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .print-header { text-align: center; margin-bottom: 15px; }
+                .print-header h1 { font-size: 18pt; margin: 0; }
+                .print-header p { font-size: 10pt; margin: 2px 0; color: #666; }
+                table { width: 100%; border-collapse: collapse; font-size: 9pt; margin-bottom: 20px; }
+                th, td { border: 1px solid #333; padding: 4px 6px; text-align: left; }
+                th { background: #333; color: #fff; font-weight: bold; }
+                tr:nth-child(even) { background: #f0f0f0; }
+                .page-break { page-break-after: always; }
+                h2 { font-size: 14pt; margin: 15px 0 8px 0; border-bottom: 2px solid #333; padding-bottom: 4px; }
+                h3 { font-size: 12pt; margin: 10px 0 5px 0; }
+                @media print { body { margin: 10px; } }
+              </style></head><body>`;
+
+            if (mode === 'byRound') {
+              html += `<div class="print-header"><h1>U7's Waterfall - Fixtures by Round</h1><p>Generated ${new Date().toLocaleDateString()}</p></div>`;
+              rounds.forEach((round, idx) => {
+                const rf = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
+                html += `<h2>Round ${round} - ${rf[0]?.time || ''}</h2>`;
+                html += `<table><tr><th>Pitch</th><th>Zone</th><th>Team 1</th><th>Team 2</th></tr>`;
+                rf.forEach(f => { html += `<tr><td>${f.pitch}</td><td>${f.zone || ''}</td><td>${f.team1.name}</td><td>${f.team2.name}</td></tr>`; });
+                html += `</table>`;
+                if (idx < rounds.length - 1 && idx % 3 === 2) html += `<div class="page-break"></div>`;
+              });
+            } else if (mode === 'byPitch') {
+              html += `<div class="print-header"><h1>U7's Waterfall - Pitch Schedules</h1><p>Generated ${new Date().toLocaleDateString()}</p></div>`;
+              pitches.forEach((pitch, idx) => {
+                const pf = fixtures.filter(f => f.pitch === pitch).sort((a, b) => a.time.localeCompare(b.time));
+                const zone = zones.find(z => z.pitches.includes(pitch));
+                html += `<h2>Pitch ${pitch}${zone ? ` (Zone ${zone.id})` : ''}</h2>`;
+                html += `<table><tr><th>Time</th><th>Round</th><th>Team 1</th><th>Team 2</th></tr>`;
+                pf.forEach(f => { html += `<tr><td>${f.time}</td><td>${f.round}</td><td>${f.team1.name}</td><td>${f.team2.name}</td></tr>`; });
+                html += `</table>`;
+                if (idx < pitches.length - 1 && idx % 2 === 1) html += `<div class="page-break"></div>`;
+              });
+            } else if (mode === 'byTeam') {
+              html += `<div class="print-header"><h1>U7's Waterfall - Team Schedules</h1><p>Generated ${new Date().toLocaleDateString()}</p></div>`;
+              const sortedTeams = [...teams].sort((a, b) => a.club.localeCompare(b.club) || a.name.localeCompare(b.name));
+              let currentClub = '';
+              sortedTeams.forEach((team, idx) => {
+                if (team.club !== currentClub) { currentClub = team.club; html += `<h2>${currentClub}</h2>`; }
+                const tf = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).sort((a, b) => a.time.localeCompare(b.time));
+                html += `<h3>${team.name}${team.zone ? ` (Zone ${team.zone})` : ''}</h3>`;
+                html += `<table><tr><th>Time</th><th>Pitch</th><th>Zone</th><th>Opponent</th></tr>`;
+                tf.forEach(f => {
+                  const opp = f.team1.id === team.id ? f.team2 : f.team1;
+                  html += `<tr><td>${f.time}</td><td>${f.pitch}</td><td>${f.zone || ''}</td><td>${opp.name}</td></tr>`;
+                });
+                html += `</table>`;
+                if (idx < sortedTeams.length - 1 && idx % 6 === 5) html += `<div class="page-break"></div>`;
+              });
+            }
+
+            html += `</body></html>`;
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => printWindow.print(), 500);
           };
 
           if (view === 'admin') {
@@ -1022,45 +1303,127 @@
                       })()}
                     </div>
                   )}
+                  {/* Undo History */}
+                  {fixtureHistory.length > 0 && (
+                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                      <h2 className="text-lg font-bold text-gray-900 mb-3">Fixture History (Undo)</h2>
+                      <div className="space-y-2">
+                        {fixtureHistory.map((entry, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div>
+                              <span className="text-sm font-medium text-gray-700">{entry.fixtures.length} fixtures</span>
+                              <span className="text-sm text-gray-500 ml-2">saved {new Date(entry.timestamp).toLocaleTimeString()}</span>
+                            </div>
+                            <button onClick={() => restoreFromHistory(idx)} className="px-3 py-1 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600">
+                              Restore
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {fixtures.length > 0 && (
                     <div className="bg-white rounded-lg shadow-lg p-6">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                         <h2 className="text-2xl font-bold text-gray-900">Generated Fixtures ({fixtures.length} matches)</h2>
-                        <div className="flex gap-2">
-                          <div className="text-sm text-gray-600">{teams.length} teams</div>
+                        <div className="flex gap-2 flex-wrap">
+                          <div className="text-sm text-gray-600 self-center">{teams.length} teams</div>
                           <button onClick={downloadFixturesAsExcel} className="flex items-center gap-2 px-4 py-2 bg-[#7c1229] text-white rounded-lg hover:bg-[#a01638]">
                             <Download size={18} />
-                            Download Excel
+                            Excel
                           </button>
+                          <div className="relative group">
+                            <button className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800">
+                              Print
+                            </button>
+                            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-48">
+                              <button onClick={() => printFixtures('byRound')} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-t-lg">By Round</button>
+                              <button onClick={() => printFixtures('byPitch')} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50">By Pitch</button>
+                              <button onClick={() => printFixtures('byTeam')} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-b-lg">By Team</button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Time</th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Pitch</th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Zone</th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 1</th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Team 2</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {fixtures.slice(0, 30).map(f => (
-                              <tr key={f.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 text-sm">{f.time}</td>
-                                <td className="px-4 py-3 text-sm font-medium">Pitch {f.pitch}</td>
-                                <td className="px-4 py-3 text-sm">
-                                  {f.zone && <span className={f.isCrossZone ? 'text-amber-600 font-medium' : 'font-medium'}>Zone {f.zone}{f.isCrossZone ? ' *' : ''}</span>}
-                                </td>
-                                <td className="px-4 py-3 text-sm">{f.team1.name}</td>
-                                <td className="px-4 py-3 text-sm">{f.team2.name}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {fixtures.length > 30 && <p className="text-center text-gray-500 mt-4">Showing 30 of {fixtures.length} fixtures. * = cross-zone match</p>}
-                      </div>
+
+                      {swapMode && (
+                        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                          <span className="text-blue-800 text-sm font-medium">
+                            Swap mode: Click another team to swap with {swapMode.teamName}
+                          </span>
+                          <button onClick={() => setSwapMode(null)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Cancel</button>
+                        </div>
+                      )}
+
+                      {/* Round-by-round view with re-generate */}
+                      {(() => {
+                        const rounds = [...new Set(fixtures.map(f => f.round))].sort((a, b) => a - b);
+                        return rounds.map(round => {
+                          const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
+                          return (
+                            <div key={round} className="mb-6">
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-lg font-bold text-gray-800">Round {round} - {roundFixtures[0]?.time}</h3>
+                                <button
+                                  onClick={() => regenerateRound(round)}
+                                  disabled={loading}
+                                  className="flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 disabled:bg-gray-400"
+                                >
+                                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                                  Re-generate
+                                </button>
+                              </div>
+                              <div className="overflow-x-auto">
+                                <table className="w-full">
+                                  <thead className="bg-gray-50">
+                                    <tr>
+                                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Pitch</th>
+                                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Zone</th>
+                                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Team 1</th>
+                                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Team 2</th>
+                                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 w-16">Swap</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-200">
+                                    {roundFixtures.map(f => (
+                                      <tr key={f.id} className={`hover:bg-gray-50 ${swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? 'bg-blue-50/50' : ''}`}>
+                                        <td className="px-4 py-2 text-sm font-medium">Pitch {f.pitch}</td>
+                                        <td className="px-4 py-2 text-sm">
+                                          {f.zone && <span className={f.isCrossZone ? 'text-amber-600 font-medium' : 'font-medium'}>Zone {f.zone}{f.isCrossZone ? ' *' : ''}</span>}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                          {swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? (
+                                            <button onClick={() => swapTeamsInFixture(f.id, f.team1.id)} className="text-blue-600 underline hover:text-blue-800">{f.team1.name}</button>
+                                          ) : f.team1.name}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                          {swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? (
+                                            <button onClick={() => swapTeamsInFixture(f.id, f.team2.id)} className="text-blue-600 underline hover:text-blue-800">{f.team2.name}</button>
+                                          ) : f.team2.name}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                          <div className="flex gap-1">
+                                            <button
+                                              onClick={() => setSwapMode({ fixtureId: f.id, slot: 1, teamName: f.team1.name, round })}
+                                              className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                              title={`Swap ${f.team1.name}`}
+                                            >1</button>
+                                            <button
+                                              onClick={() => setSwapMode({ fixtureId: f.id, slot: 2, teamName: f.team2.name, round })}
+                                              className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                                              title={`Swap ${f.team2.name}`}
+                                            >2</button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                 </div>
