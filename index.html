@@ -1190,6 +1190,114 @@
             }
           };
 
+          const downloadClubPackPDF = async (clubName) => {
+            try {
+              // Lazy-load jsPDF + autoTable from CDN
+              if (!window.jspdf) {
+                const s1 = document.createElement('script');
+                s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
+                await new Promise((resolve, reject) => { s1.onload = resolve; s1.onerror = reject; document.head.appendChild(s1); });
+              }
+              if (!window.jspdf_autotable) {
+                const s2 = document.createElement('script');
+                s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js';
+                await new Promise((resolve, reject) => { s2.onload = resolve; s2.onerror = reject; document.head.appendChild(s2); });
+              }
+
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+              const pageW = doc.internal.pageSize.getWidth();
+              const pageH = doc.internal.pageSize.getHeight();
+              const margin = 8;
+              const clubTeams = teams.filter(t => t.club === clubName);
+
+              // --- Page 1: Overview + Full Schedule ---
+              // Title
+              doc.setFontSize(16);
+              doc.setFont(undefined, 'bold');
+              doc.text(clubName + ' - Festival Pack', pageW / 2, margin + 4, { align: 'center' });
+              doc.setFontSize(8);
+              doc.setFont(undefined, 'normal');
+              doc.text('Generated ' + new Date().toLocaleDateString(), pageW / 2, margin + 9, { align: 'center' });
+
+              // Overview table
+              const overviewHead = [['Team', 'Zone', 'Matches', 'Ref Duties', 'Conflicts']];
+              const overviewBody = clubTeams.map(team => {
+                const matchCount = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).length;
+                const refCount = fixtures.filter(f => f.referee && f.referee.id === team.id).length;
+                const conflictCount = fixtures.filter(f => f.referee && f.referee.id === team.id && f.refereeConflict).length;
+                return [team.name, team.zone || '-', matchCount, refCount, conflictCount];
+              });
+
+              doc.autoTable({
+                startY: margin + 12,
+                head: overviewHead,
+                body: overviewBody,
+                theme: 'grid',
+                styles: { fontSize: 7, cellPadding: 1.5 },
+                headStyles: { fillColor: [124, 18, 41], fontSize: 7, cellPadding: 1.5 },
+                margin: { left: margin, right: margin },
+                tableWidth: 'wrap',
+              });
+
+              // Full schedule table: all teams interleaved by time
+              const scheduleHead = [['Team', 'Time', 'Type', 'Pitch', 'Zone', 'Detail', 'Note']];
+              const scheduleBody = [];
+              clubTeams.forEach(team => {
+                const items = [];
+                fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).forEach(f => {
+                  const opp = f.team1.id === team.id ? f.team2 : f.team1;
+                  items.push({ time: f.time, type: 'PLAY', pitch: f.pitch, zone: f.zone || '', detail: 'vs ' + opp.name + ' (' + opp.club + ')', note: '' });
+                });
+                fixtures.filter(f => f.referee && f.referee.id === team.id).forEach(f => {
+                  items.push({
+                    time: f.time, type: 'REF', pitch: f.pitch, zone: f.zone || '',
+                    detail: f.team1.name + ' vs ' + f.team2.name,
+                    note: f.refereeConflict ? 'CONFLICT' : '',
+                  });
+                });
+                items.sort((a, b) => a.time.localeCompare(b.time));
+                items.forEach((s, idx) => {
+                  scheduleBody.push([idx === 0 ? team.name : '', s.time, s.type, s.pitch, s.zone, s.detail, s.note]);
+                });
+                scheduleBody.push(['', '', '', '', '', '', '']);
+              });
+
+              doc.autoTable({
+                startY: doc.lastAutoTable.finalY + 4,
+                head: scheduleHead,
+                body: scheduleBody,
+                theme: 'grid',
+                styles: { fontSize: 6.5, cellPadding: 1.2 },
+                headStyles: { fillColor: [124, 18, 41], fontSize: 6.5, cellPadding: 1.2 },
+                columnStyles: {
+                  0: { cellWidth: 30 },
+                  1: { cellWidth: 16 },
+                  2: { cellWidth: 12 },
+                  3: { cellWidth: 14 },
+                  4: { cellWidth: 14 },
+                  6: { cellWidth: 22 },
+                },
+                margin: { left: margin, right: margin },
+                didParseCell: (data) => {
+                  if (data.section === 'body' && data.row.raw[6] === 'CONFLICT') {
+                    data.cell.styles.textColor = [220, 38, 38];
+                    data.cell.styles.fontStyle = 'bold';
+                  }
+                  if (data.section === 'body' && data.row.raw[2] === 'REF') {
+                    data.cell.styles.fillColor = [254, 243, 199];
+                  }
+                },
+              });
+
+              const safeName = clubName.replace(/[^a-zA-Z0-9]/g, '_');
+              doc.save(safeName + '_Festival_Pack.pdf');
+            } catch (err) {
+              setError('Error generating club pack PDF: ' + err.message);
+              console.error(err);
+            }
+          };
+
           const downloadClubPack = async (clubName) => {
             try {
               if (!window.XLSX) {
@@ -1616,11 +1724,15 @@
                               <Download size={18} />
                               Club Pack
                             </button>
-                            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-60 overflow-y-auto">
+                            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-64 max-h-60 overflow-y-auto">
                               {[...new Set(teams.map(t => t.club))].sort().map(club => (
-                                <button key={club} onClick={() => downloadClubPack(club)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100">
-                                  {club}
-                                </button>
+                                <div key={club} className="flex items-center justify-between px-4 py-2 border-b border-gray-100 hover:bg-gray-50">
+                                  <span className="text-sm text-gray-900 font-medium truncate mr-2">{club}</span>
+                                  <div className="flex gap-1 flex-shrink-0">
+                                    <button onClick={() => downloadClubPackPDF(club)} className="px-2 py-1 bg-red-700 text-white rounded text-xs font-medium hover:bg-red-800">PDF</button>
+                                    <button onClick={() => downloadClubPack(club)} className="px-2 py-1 bg-green-700 text-white rounded text-xs font-medium hover:bg-green-800">Excel</button>
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           </div>
