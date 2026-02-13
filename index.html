@@ -421,9 +421,12 @@
               const allFixtures = [...otherFixtures, ...newRoundFixtures].sort((a, b) =>
                 a.time.localeCompare(b.time) || a.pitch - b.pitch
               );
+              // Re-assign referees across all rounds (since changes ripple)
+              assignReferees(allFixtures, zones);
               setFixtures(allFixtures);
               await saveFixtures(allFixtures, teams, zones);
-              setError(`Re-generated round ${roundNum} with ${newRoundFixtures.length} fixtures`);
+              const conflictCount = allFixtures.filter(f => f.refereeConflict).length;
+              setError(`Re-generated round ${roundNum} with ${newRoundFixtures.length} fixtures. Referee conflicts: ${conflictCount}`);
             } catch (err) {
               setError('Error re-generating round: ' + err.message);
             }
@@ -723,6 +726,88 @@
             return bestMatch;
           };
 
+          const assignReferees = (fixtureList, zoneList) => {
+            // Build lookup: pitch number -> zone
+            const pitchToZone = {};
+            zoneList.forEach(z => z.pitches.forEach(p => { pitchToZone[p] = z; }));
+
+            // Track how many times each team has refereed (for balancing)
+            const refereeCounts = {};
+            zoneList.forEach(z => z.teams.forEach(t => { refereeCounts[t.id] = 0; }));
+
+            // Group fixtures by round
+            const rounds = [...new Set(fixtureList.map(f => f.round))].sort((a, b) => a - b);
+
+            rounds.forEach(round => {
+              const roundFixtures = fixtureList.filter(f => f.round === round);
+              const playingTeams = new Set();
+              roundFixtures.forEach(f => {
+                playingTeams.add(f.team1.id);
+                playingTeams.add(f.team2.id);
+              });
+
+              const assignedRefsThisRound = new Set();
+
+              // Sort fixtures so zones with fewer available referees are processed first
+              // (greedy approach - hardest to fill first)
+              const sortedFixtures = [...roundFixtures].sort((a, b) => {
+                const zoneA = pitchToZone[a.pitch];
+                const zoneB = pitchToZone[b.pitch];
+                const availA = zoneA ? zoneA.teams.filter(t =>
+                  t.id !== a.team1.id && t.id !== a.team2.id
+                ).length : 0;
+                const availB = zoneB ? zoneB.teams.filter(t =>
+                  t.id !== b.team1.id && t.id !== b.team2.id
+                ).length : 0;
+                return availA - availB;
+              });
+
+              sortedFixtures.forEach(fixture => {
+                const zone = pitchToZone[fixture.pitch];
+                if (!zone) {
+                  fixture.referee = null;
+                  fixture.refereeConflict = true;
+                  return;
+                }
+
+                // Candidates: teams in the zone, not playing THIS match, not already refereeing this round
+                const candidates = zone.teams.filter(t =>
+                  t.id !== fixture.team1.id &&
+                  t.id !== fixture.team2.id &&
+                  !assignedRefsThisRound.has(t.id)
+                );
+
+                // Split into preferred (not playing at all this round) and fallback (playing another match)
+                const preferred = candidates.filter(t => !playingTeams.has(t.id));
+                const fallback = candidates.filter(t => playingTeams.has(t.id));
+
+                const pickLeastUsed = (list) => {
+                  return list.sort((a, b) => (refereeCounts[a.id] || 0) - (refereeCounts[b.id] || 0))[0];
+                };
+
+                if (preferred.length > 0) {
+                  const ref = pickLeastUsed(preferred);
+                  fixture.referee = { id: ref.id, name: ref.name, club: ref.club, zone: ref.zone };
+                  fixture.refereeConflict = false;
+                  refereeCounts[ref.id] = (refereeCounts[ref.id] || 0) + 1;
+                  assignedRefsThisRound.add(ref.id);
+                } else if (fallback.length > 0) {
+                  const ref = pickLeastUsed(fallback);
+                  fixture.referee = { id: ref.id, name: ref.name, club: ref.club, zone: ref.zone };
+                  fixture.refereeConflict = true;
+                  refereeCounts[ref.id] = (refereeCounts[ref.id] || 0) + 1;
+                  assignedRefsThisRound.add(ref.id);
+                } else {
+                  // No one available in zone - try adjacent zones as last resort
+                  fixture.referee = null;
+                  fixture.refereeConflict = true;
+                }
+              });
+            });
+
+            return fixtureList;
+          };
+
           const generateFixtures = async () => {
             setLoading(true);
             setError('');
@@ -856,6 +941,9 @@
               if (allFixtures.length === 0) {
                 setError('Failed to generate fixtures. Try adjusting the number of pitches or rounds.');
               } else {
+                // Assign referees to all fixtures
+                assignReferees(allFixtures, zoneList);
+
                 setFixtures(allFixtures);
                 setTeams(teamList);
                 setZones(zoneList);
@@ -871,10 +959,14 @@
                 const crossZoneCount = allFixtures.filter(f => f.isCrossZone).length;
                 const intraPercent = allFixtures.length > 0 ? Math.round(intraZoneCount / allFixtures.length * 100) : 0;
 
+                const conflictCount = allFixtures.filter(f => f.refereeConflict).length;
+                const unassignedCount = allFixtures.filter(f => !f.referee).length;
+
                 let summary = `Generated ${allFixtures.length} fixtures across ${totalRounds} rounds in ${zoneList.length} zones. `;
                 summary += `Teams have ${minFixtures}-${maxFixtures} matches (avg: ${avgFixtures}). `;
                 summary += `${teamsWithTarget}/${teamList.length} teams have exactly ${numRounds} matches. `;
-                summary += `${intraPercent}% intra-zone, ${100 - intraPercent}% cross-zone.`;
+                summary += `${intraPercent}% intra-zone, ${100 - intraPercent}% cross-zone. `;
+                summary += `Referees: ${allFixtures.length - conflictCount} clean, ${conflictCount - unassignedCount} conflicts, ${unassignedCount} unassigned.`;
 
                 setError(summary);
                 console.log(summary);
@@ -967,63 +1059,76 @@
 
               const wb = window.XLSX.utils.book_new();
 
-              const fixtureData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2', 'Club 1', 'Club 2', 'Cross-Zone']];
+              const fixtureData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2', 'Club 1', 'Club 2', 'Cross-Zone', 'Referee', 'Referee Club', 'Ref Conflict']];
               fixtures.forEach(f => {
-                fixtureData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name, f.team1.club, f.team2.club, f.isCrossZone ? 'Yes' : '']);
+                fixtureData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name, f.team1.club, f.team2.club, f.isCrossZone ? 'Yes' : '',
+                  f.referee ? f.referee.name : 'UNASSIGNED', f.referee ? f.referee.club : '', f.refereeConflict ? 'YES' : '']);
               });
               const wsFixtures = window.XLSX.utils.aoa_to_sheet(fixtureData);
               window.XLSX.utils.book_append_sheet(wb, wsFixtures, 'All Fixtures');
 
-              const teamData = [['Team', 'Club', 'Home Zone', 'Round', 'Time', 'Pitch', 'Zone', 'Opponent', 'Opponent Club']];
+              const teamData = [['Team', 'Club', 'Home Zone', 'Round', 'Time', 'Pitch', 'Zone', 'Opponent', 'Opponent Club', 'Referee', 'Ref Conflict']];
               teams.forEach(team => {
                 const teamFixtures = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id)
                   .sort((a, b) => a.time.localeCompare(b.time));
                 teamFixtures.forEach(f => {
                   const opponent = f.team1.id === team.id ? f.team2 : f.team1;
-                  teamData.push([team.name, team.club, team.zone || '', f.round, f.time, f.pitch, f.zone || '', opponent.name, opponent.club]);
+                  teamData.push([team.name, team.club, team.zone || '', f.round, f.time, f.pitch, f.zone || '', opponent.name, opponent.club,
+                    f.referee ? f.referee.name : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
                 });
               });
               const wsTeams = window.XLSX.utils.aoa_to_sheet(teamData);
               window.XLSX.utils.book_append_sheet(wb, wsTeams, 'By Team');
 
               const rounds = [...new Set(fixtures.map(f => f.round))].sort((a, b) => a - b);
-              const roundData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2']];
+              const roundData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2', 'Referee', 'Ref Conflict']];
               rounds.forEach(round => {
                 const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
                 roundFixtures.forEach(f => {
-                  roundData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name]);
+                  roundData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name,
+                    f.referee ? f.referee.name : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
                 });
                 if (round < rounds.length) {
-                  roundData.push(['', '', '', '', '', '']);
+                  roundData.push(['', '', '', '', '', '', '', '']);
                 }
               });
               const wsRounds = window.XLSX.utils.aoa_to_sheet(roundData);
               window.XLSX.utils.book_append_sheet(wb, wsRounds, 'By Round');
 
               const pitches = [...new Set(fixtures.map(f => f.pitch))].sort((a, b) => a - b);
-              const pitchData = [['Pitch', 'Zone', 'Time', 'Round', 'Team 1', 'Team 2']];
+              const pitchData = [['Pitch', 'Zone', 'Time', 'Round', 'Team 1', 'Team 2', 'Referee', 'Ref Conflict']];
               pitches.forEach(pitch => {
                 const pitchFixtures = fixtures.filter(f => f.pitch === pitch).sort((a, b) => a.time.localeCompare(b.time));
                 const pitchZone = zones.find(z => z.pitches.includes(pitch));
                 pitchFixtures.forEach(f => {
-                  pitchData.push([f.pitch, pitchZone ? pitchZone.id : '', f.time, f.round, f.team1.name, f.team2.name]);
+                  pitchData.push([f.pitch, pitchZone ? pitchZone.id : '', f.time, f.round, f.team1.name, f.team2.name,
+                    f.referee ? f.referee.name : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
                 });
                 if (pitch < pitches.length) {
-                  pitchData.push(['', '', '', '', '', '']);
+                  pitchData.push(['', '', '', '', '', '', '', '']);
                 }
               });
               const wsPitches = window.XLSX.utils.aoa_to_sheet(pitchData);
               window.XLSX.utils.book_append_sheet(wb, wsPitches, 'By Pitch');
 
               const allTimes = [...new Set(fixtures.map(f => f.time))].sort();
-              const matrixData = [['Team', 'Zone', ...allTimes]];
+              const matrixHeaders = ['Team', 'Zone'];
+              allTimes.forEach(t => { matrixHeaders.push(t + ' (Play)'); matrixHeaders.push(t + ' (Ref)'); });
+              const matrixData = [matrixHeaders];
               teams.forEach(team => {
                 const row = [team.name, team.zone || ''];
                 allTimes.forEach(time => {
-                  const fixture = fixtures.find(f => f.time === time && (f.team1.id === team.id || f.team2.id === team.id));
-                  if (fixture) {
-                    const opponent = fixture.team1.id === team.id ? fixture.team2 : fixture.team1;
-                    row.push(opponent.name);
+                  const playFixture = fixtures.find(f => f.time === time && (f.team1.id === team.id || f.team2.id === team.id));
+                  const refFixture = fixtures.find(f => f.time === time && f.referee && f.referee.id === team.id);
+                  if (playFixture) {
+                    const opponent = playFixture.team1.id === team.id ? playFixture.team2 : playFixture.team1;
+                    row.push('vs ' + opponent.name);
+                  } else {
+                    row.push('');
+                  }
+                  if (refFixture) {
+                    const label = refFixture.refereeConflict ? 'REF* (CONFLICT)' : 'REF';
+                    row.push(label);
                   } else {
                     row.push('');
                   }
@@ -1033,12 +1138,35 @@
               const wsMatrix = window.XLSX.utils.aoa_to_sheet(matrixData);
               window.XLSX.utils.book_append_sheet(wb, wsMatrix, 'Team Schedule Matrix');
 
+              // Referee Schedule sheet
+              const refData = [['Team', 'Club', 'Zone', 'Total Ref Duties', 'Round', 'Time', 'Pitch', 'Match', 'Conflict']];
+              teams.forEach(team => {
+                const refFixtures = fixtures.filter(f => f.referee && f.referee.id === team.id)
+                  .sort((a, b) => a.time.localeCompare(b.time));
+                if (refFixtures.length === 0) {
+                  refData.push([team.name, team.club, team.zone || '', 0, '', '', '', '', '']);
+                } else {
+                  refFixtures.forEach((f, idx) => {
+                    refData.push([
+                      idx === 0 ? team.name : '', idx === 0 ? team.club : '', idx === 0 ? (team.zone || '') : '',
+                      idx === 0 ? refFixtures.length : '',
+                      f.round, f.time, f.pitch,
+                      `${f.team1.name} vs ${f.team2.name}`,
+                      f.refereeConflict ? 'YES - team playing simultaneously' : '',
+                    ]);
+                  });
+                }
+              });
+              const wsRef = window.XLSX.utils.aoa_to_sheet(refData);
+              window.XLSX.utils.book_append_sheet(wb, wsRef, 'Referee Schedule');
+
               if (zones.length > 0) {
-                const zoneSheetData = [['Zone', 'Pitches', 'Teams', 'Team Names', 'Clubs Represented', 'Intra-Zone Matches', 'Cross-Zone Matches']];
+                const zoneSheetData = [['Zone', 'Pitches', 'Teams', 'Team Names', 'Clubs Represented', 'Intra-Zone Matches', 'Cross-Zone Matches', 'Referee Conflicts']];
                 zones.forEach(zone => {
                   const zoneFixtures = fixtures.filter(f => f.zone === zone.id);
                   const intraCount = zoneFixtures.filter(f => !f.isCrossZone).length;
                   const crossCount = zoneFixtures.filter(f => f.isCrossZone).length;
+                  const refConflicts = zoneFixtures.filter(f => f.refereeConflict).length;
                   const clubs = [...new Set(zone.teams.map(t => t.club))];
                   zoneSheetData.push([
                     zone.id,
@@ -1048,6 +1176,7 @@
                     clubs.join(', '),
                     intraCount,
                     crossCount,
+                    refConflicts,
                   ]);
                 });
                 const wsZones = window.XLSX.utils.aoa_to_sheet(zoneSheetData);
@@ -1057,6 +1186,106 @@
               window.XLSX.writeFile(wb, 'Rugby_Festival_Fixtures.xlsx');
             } catch (err) {
               setError('Error generating Excel file: ' + err.message);
+              console.error(err);
+            }
+          };
+
+          const downloadClubPack = async (clubName) => {
+            try {
+              if (!window.XLSX) {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+                await new Promise((resolve, reject) => {
+                  script.onload = resolve;
+                  script.onerror = reject;
+                  document.head.appendChild(script);
+                });
+              }
+
+              const wb = window.XLSX.utils.book_new();
+              const clubTeams = teams.filter(t => t.club === clubName);
+
+              // Sheet 1: Club Overview
+              const overviewData = [
+                [clubName + ' - Festival Pack'],
+                [''],
+                ['Team', 'Zone', 'Total Matches', 'Total Ref Duties', 'Ref Conflicts'],
+              ];
+              clubTeams.forEach(team => {
+                const matchCount = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).length;
+                const refCount = fixtures.filter(f => f.referee && f.referee.id === team.id).length;
+                const conflictCount = fixtures.filter(f => f.referee && f.referee.id === team.id && f.refereeConflict).length;
+                overviewData.push([team.name, team.zone || '', matchCount, refCount, conflictCount]);
+              });
+              const wsOverview = window.XLSX.utils.aoa_to_sheet(overviewData);
+              window.XLSX.utils.book_append_sheet(wb, wsOverview, 'Overview');
+
+              // Sheet 2: Full Schedule (matches + ref duties combined, sorted by time)
+              const scheduleData = [['Team', 'Time', 'Activity', 'Pitch', 'Zone', 'Detail', 'Conflict']];
+              clubTeams.forEach(team => {
+                const schedule = [];
+                const teamFixtures = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id);
+                teamFixtures.forEach(f => {
+                  const opp = f.team1.id === team.id ? f.team2 : f.team1;
+                  schedule.push({ time: f.time, activity: 'PLAY', pitch: f.pitch, zone: f.zone, detail: `vs ${opp.name} (${opp.club})`, conflict: '' });
+                });
+                const refFixtures = fixtures.filter(f => f.referee && f.referee.id === team.id);
+                refFixtures.forEach(f => {
+                  schedule.push({
+                    time: f.time, activity: 'REFEREE', pitch: f.pitch, zone: f.zone,
+                    detail: `${f.team1.name} vs ${f.team2.name}`,
+                    conflict: f.refereeConflict ? 'YES - your team playing simultaneously' : '',
+                  });
+                });
+                schedule.sort((a, b) => a.time.localeCompare(b.time));
+                schedule.forEach((s, idx) => {
+                  scheduleData.push([idx === 0 ? team.name : '', s.time, s.activity, s.pitch, s.zone || '', s.detail, s.conflict]);
+                });
+                scheduleData.push(['', '', '', '', '', '', '']);
+              });
+              const wsSchedule = window.XLSX.utils.aoa_to_sheet(scheduleData);
+              window.XLSX.utils.book_append_sheet(wb, wsSchedule, 'Full Schedule');
+
+              // Sheet 3: Match Fixtures only
+              const matchData = [['Team', 'Round', 'Time', 'Pitch', 'Zone', 'Opponent', 'Opponent Club', 'Referee']];
+              clubTeams.forEach(team => {
+                const teamFixtures = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id)
+                  .sort((a, b) => a.time.localeCompare(b.time));
+                teamFixtures.forEach((f, idx) => {
+                  const opp = f.team1.id === team.id ? f.team2 : f.team1;
+                  matchData.push([idx === 0 ? team.name : '', f.round, f.time, f.pitch, f.zone || '', opp.name, opp.club,
+                    f.referee ? f.referee.name : 'UNASSIGNED']);
+                });
+                matchData.push(['', '', '', '', '', '', '', '']);
+              });
+              const wsMatches = window.XLSX.utils.aoa_to_sheet(matchData);
+              window.XLSX.utils.book_append_sheet(wb, wsMatches, 'Matches');
+
+              // Sheet 4: Referee Duties only
+              const refDutyData = [['Team', 'Round', 'Time', 'Pitch', 'Zone', 'Match', 'Conflict']];
+              clubTeams.forEach(team => {
+                const refFixtures = fixtures.filter(f => f.referee && f.referee.id === team.id)
+                  .sort((a, b) => a.time.localeCompare(b.time));
+                if (refFixtures.length === 0) {
+                  refDutyData.push([team.name, '', '', '', '', 'No referee duties assigned', '']);
+                } else {
+                  refFixtures.forEach((f, idx) => {
+                    refDutyData.push([
+                      idx === 0 ? team.name : '', f.round, f.time, f.pitch, f.zone || '',
+                      `${f.team1.name} vs ${f.team2.name}`,
+                      f.refereeConflict ? 'YES - team playing simultaneously' : '',
+                    ]);
+                  });
+                }
+                refDutyData.push(['', '', '', '', '', '', '']);
+              });
+              const wsRefDuties = window.XLSX.utils.aoa_to_sheet(refDutyData);
+              window.XLSX.utils.book_append_sheet(wb, wsRefDuties, 'Referee Duties');
+
+              const safeName = clubName.replace(/[^a-zA-Z0-9]/g, '_');
+              window.XLSX.writeFile(wb, `${safeName}_Festival_Pack.xlsx`);
+            } catch (err) {
+              setError('Error generating club pack: ' + err.message);
               console.error(err);
             }
           };
@@ -1075,45 +1304,70 @@
                 th, td { border: 1px solid #333; padding: 4px 6px; text-align: left; }
                 th { background: #333; color: #fff; font-weight: bold; }
                 tr:nth-child(even) { background: #f0f0f0; }
+                .conflict { background: #fee2e2 !important; }
+                .ref-duty { background: #fef3c7 !important; }
                 .page-break { page-break-after: always; }
                 h2 { font-size: 14pt; margin: 15px 0 8px 0; border-bottom: 2px solid #333; padding-bottom: 4px; }
                 h3 { font-size: 12pt; margin: 10px 0 5px 0; }
-                @media print { body { margin: 10px; } }
+                .legend { font-size: 8pt; color: #666; margin-bottom: 10px; }
+                @media print { body { margin: 10px; } .conflict { background: #fee2e2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .ref-duty { background: #fef3c7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
               </style></head><body>`;
 
             if (mode === 'byRound') {
               html += `<div class="print-header"><h1>U7's Waterfall - Fixtures by Round</h1><p>Generated ${new Date().toLocaleDateString()}</p></div>`;
+              html += `<p class="legend">* = Referee conflict (referee's team also playing this round)</p>`;
               rounds.forEach((round, idx) => {
                 const rf = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
                 html += `<h2>Round ${round} - ${rf[0]?.time || ''}</h2>`;
-                html += `<table><tr><th>Pitch</th><th>Zone</th><th>Team 1</th><th>Team 2</th></tr>`;
-                rf.forEach(f => { html += `<tr><td>${f.pitch}</td><td>${f.zone || ''}</td><td>${f.team1.name}</td><td>${f.team2.name}</td></tr>`; });
+                html += `<table><tr><th>Pitch</th><th>Zone</th><th>Team 1</th><th>Team 2</th><th>Referee</th></tr>`;
+                rf.forEach(f => {
+                  const refText = f.referee ? f.referee.name : 'UNASSIGNED';
+                  const rowClass = f.refereeConflict ? ' class="conflict"' : '';
+                  html += `<tr${rowClass}><td>${f.pitch}</td><td>${f.zone || ''}</td><td>${f.team1.name}</td><td>${f.team2.name}</td><td>${refText}${f.refereeConflict ? ' *' : ''}</td></tr>`;
+                });
                 html += `</table>`;
                 if (idx < rounds.length - 1 && idx % 3 === 2) html += `<div class="page-break"></div>`;
               });
             } else if (mode === 'byPitch') {
               html += `<div class="print-header"><h1>U7's Waterfall - Pitch Schedules</h1><p>Generated ${new Date().toLocaleDateString()}</p></div>`;
+              html += `<p class="legend">* = Referee conflict (referee's team also playing this round)</p>`;
               pitches.forEach((pitch, idx) => {
                 const pf = fixtures.filter(f => f.pitch === pitch).sort((a, b) => a.time.localeCompare(b.time));
                 const zone = zones.find(z => z.pitches.includes(pitch));
                 html += `<h2>Pitch ${pitch}${zone ? ` (Zone ${zone.id})` : ''}</h2>`;
-                html += `<table><tr><th>Time</th><th>Round</th><th>Team 1</th><th>Team 2</th></tr>`;
-                pf.forEach(f => { html += `<tr><td>${f.time}</td><td>${f.round}</td><td>${f.team1.name}</td><td>${f.team2.name}</td></tr>`; });
+                html += `<table><tr><th>Time</th><th>Round</th><th>Team 1</th><th>Team 2</th><th>Referee</th></tr>`;
+                pf.forEach(f => {
+                  const refText = f.referee ? f.referee.name : 'UNASSIGNED';
+                  const rowClass = f.refereeConflict ? ' class="conflict"' : '';
+                  html += `<tr${rowClass}><td>${f.time}</td><td>${f.round}</td><td>${f.team1.name}</td><td>${f.team2.name}</td><td>${refText}${f.refereeConflict ? ' *' : ''}</td></tr>`;
+                });
                 html += `</table>`;
                 if (idx < pitches.length - 1 && idx % 2 === 1) html += `<div class="page-break"></div>`;
               });
             } else if (mode === 'byTeam') {
               html += `<div class="print-header"><h1>U7's Waterfall - Team Schedules</h1><p>Generated ${new Date().toLocaleDateString()}</p></div>`;
+              html += `<p class="legend">* = Referee conflict (your team also playing this round). Highlighted rows = referee duty.</p>`;
               const sortedTeams = [...teams].sort((a, b) => a.club.localeCompare(b.club) || a.name.localeCompare(b.name));
               let currentClub = '';
               sortedTeams.forEach((team, idx) => {
                 if (team.club !== currentClub) { currentClub = team.club; html += `<h2>${currentClub}</h2>`; }
                 const tf = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).sort((a, b) => a.time.localeCompare(b.time));
-                html += `<h3>${team.name}${team.zone ? ` (Zone ${team.zone})` : ''}</h3>`;
-                html += `<table><tr><th>Time</th><th>Pitch</th><th>Zone</th><th>Opponent</th></tr>`;
+                const refDuties = fixtures.filter(f => f.referee && f.referee.id === team.id).sort((a, b) => a.time.localeCompare(b.time));
+                html += `<h3>${team.name}${team.zone ? ` (Zone ${team.zone})` : ''} - ${tf.length} matches, ${refDuties.length} ref duties</h3>`;
+                // Combined schedule: matches + ref duties in time order
+                const schedule = [];
                 tf.forEach(f => {
                   const opp = f.team1.id === team.id ? f.team2 : f.team1;
-                  html += `<tr><td>${f.time}</td><td>${f.pitch}</td><td>${f.zone || ''}</td><td>${opp.name}</td></tr>`;
+                  schedule.push({ time: f.time, pitch: f.pitch, zone: f.zone, type: 'PLAY', detail: `vs ${opp.name}`, conflict: false });
+                });
+                refDuties.forEach(f => {
+                  schedule.push({ time: f.time, pitch: f.pitch, zone: f.zone, type: 'REF', detail: `${f.team1.name} vs ${f.team2.name}`, conflict: f.refereeConflict });
+                });
+                schedule.sort((a, b) => a.time.localeCompare(b.time) || (a.type === 'PLAY' ? -1 : 1));
+                html += `<table><tr><th>Time</th><th>Pitch</th><th>Zone</th><th>Activity</th><th>Detail</th></tr>`;
+                schedule.forEach(s => {
+                  const rowClass = s.conflict ? ' class="conflict"' : s.type === 'REF' ? ' class="ref-duty"' : '';
+                  html += `<tr${rowClass}><td>${s.time}</td><td>${s.pitch}</td><td>${s.zone || ''}</td><td>${s.type}${s.conflict ? ' *' : ''}</td><td>${s.detail}</td></tr>`;
                 });
                 html += `</table>`;
                 if (idx < sortedTeams.length - 1 && idx % 6 === 5) html += `<div class="page-break"></div>`;
@@ -1358,6 +1612,19 @@
                             Excel
                           </button>
                           <div className="relative group">
+                            <button className="flex items-center gap-2 px-4 py-2 bg-green-700 text-white rounded-lg hover:bg-green-800">
+                              <Download size={18} />
+                              Club Pack
+                            </button>
+                            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-60 overflow-y-auto">
+                              {[...new Set(teams.map(t => t.club))].sort().map(club => (
+                                <button key={club} onClick={() => downloadClubPack(club)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100">
+                                  {club}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="relative group">
                             <button className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800">
                               Print
                             </button>
@@ -1405,12 +1672,13 @@
                                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Zone</th>
                                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Team 1</th>
                                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Team 2</th>
+                                      <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Referee</th>
                                       <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 w-16">Swap</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-200">
                                     {roundFixtures.map(f => (
-                                      <tr key={f.id} className={`hover:bg-gray-50 ${swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? 'bg-blue-50/50' : ''}`}>
+                                      <tr key={f.id} className={`hover:bg-gray-50 ${f.refereeConflict ? 'bg-red-50' : ''} ${swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? 'bg-blue-50/50' : ''}`}>
                                         <td className="px-4 py-2 text-sm font-medium">Pitch {f.pitch}</td>
                                         <td className="px-4 py-2 text-sm">
                                           {f.zone && <span className={f.isCrossZone ? 'text-amber-600 font-medium' : 'font-medium'}>Zone {f.zone}{f.isCrossZone ? ' *' : ''}</span>}
@@ -1424,6 +1692,15 @@
                                           {swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? (
                                             <button onClick={() => swapTeamsInFixture(f.id, f.team2.id)} className="text-blue-600 underline hover:text-blue-800">{f.team2.name}</button>
                                           ) : f.team2.name}
+                                        </td>
+                                        <td className="px-4 py-2 text-sm">
+                                          {f.referee ? (
+                                            <span className={f.refereeConflict ? 'text-red-600 font-medium' : 'text-green-700'}>
+                                              {f.referee.name}{f.refereeConflict ? ' !' : ''}
+                                            </span>
+                                          ) : (
+                                            <span className="text-red-500 font-medium">NONE</span>
+                                          )}
                                         </td>
                                         <td className="px-4 py-2 text-sm">
                                           <div className="flex gap-1">
@@ -1526,7 +1803,7 @@
                               Zone {selectedTeam.zone} (Pitches {zones.find(z => z.id === selectedTeam.zone)?.pitches.join(' & ')})
                             </p>
                           )}
-                          <p className="text-[#7c1229] font-medium mt-1">{teamFixtures.length} fixtures</p>
+                          <p className="text-[#7c1229] font-medium mt-1">{teamFixtures.length} matches, {fixtures.filter(f => f.referee && f.referee.id === selectedTeam.id).length} ref duties</p>
                         </div>
                         {selectedTeam.zone && (() => {
                           const teamZone = zones.find(z => z.id === selectedTeam.zone);
@@ -1549,36 +1826,80 @@
                       </div>
                     </div>
                     <div className="space-y-3">
-                      {teamFixtures.map((fixture, idx) => {
-                        const opponent = fixture.team1.id === selectedTeam.id ? fixture.team2 : fixture.team1;
-                        const isAway = selectedTeam.zone && fixture.zone !== selectedTeam.zone;
-                        return (
-                          <div key={fixture.id} className={`rounded-lg shadow p-4 ${isAway ? 'bg-amber-50 border-2 border-amber-400' : 'bg-white'}`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-2xl font-bold text-[#7c1229]">{fixture.time}</span>
-                              <span className="text-lg font-medium text-gray-700">Match {idx + 1}</span>
-                            </div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <MapPin size={18} className={isAway ? 'text-amber-600' : 'text-gray-500'} />
-                              <span className="font-medium text-gray-900">Pitch {fixture.pitch}</span>
-                              {fixture.zone && (
-                                isAway ? (
-                                  <span className="px-2 py-0.5 bg-amber-500 text-white rounded text-xs font-bold">
-                                    AWAY - Zone {fixture.zone}
+                      {(() => {
+                        // Build combined schedule: matches + ref duties in time order
+                        const refDuties = fixtures.filter(f => f.referee && f.referee.id === selectedTeam.id);
+                        const schedule = [];
+                        teamFixtures.forEach((f, idx) => {
+                          const opponent = f.team1.id === selectedTeam.id ? f.team2 : f.team1;
+                          schedule.push({ ...f, type: 'PLAY', opponent, matchNum: idx + 1 });
+                        });
+                        refDuties.forEach(f => {
+                          schedule.push({ ...f, type: 'REF' });
+                        });
+                        schedule.sort((a, b) => a.time.localeCompare(b.time) || (a.type === 'PLAY' ? -1 : 1));
+
+                        return schedule.map((item) => {
+                          if (item.type === 'PLAY') {
+                            const isAway = selectedTeam.zone && item.zone !== selectedTeam.zone;
+                            return (
+                              <div key={item.id + '-play'} className={`rounded-lg shadow p-4 ${isAway ? 'bg-amber-50 border-2 border-amber-400' : 'bg-white'}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-2xl font-bold text-[#7c1229]">{item.time}</span>
+                                  <span className="text-lg font-medium text-gray-700">Match {item.matchNum}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <MapPin size={18} className={isAway ? 'text-amber-600' : 'text-gray-500'} />
+                                  <span className="font-medium text-gray-900">Pitch {item.pitch}</span>
+                                  {item.zone && (
+                                    isAway ? (
+                                      <span className="px-2 py-0.5 bg-amber-500 text-white rounded text-xs font-bold">
+                                        AWAY - Zone {item.zone}
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 bg-[#7c1229]/10 text-[#7c1229] rounded text-xs font-medium">
+                                        Zone {item.zone}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                                <div className="text-gray-700">
+                                  <span className="font-medium">vs</span> {item.opponent.name}
+                                </div>
+                                {item.referee && (
+                                  <div className="text-xs text-gray-500 mt-1">Referee: {item.referee.name}</div>
+                                )}
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div key={item.id + '-ref'} className={`rounded-lg shadow p-4 border-2 ${item.refereeConflict ? 'bg-red-50 border-red-400' : 'bg-yellow-50 border-yellow-400'}`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-2xl font-bold text-gray-600">{item.time}</span>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.refereeConflict ? 'bg-red-500 text-white' : 'bg-yellow-500 text-white'}`}>
+                                    {item.refereeConflict ? 'REF DUTY - CONFLICT' : 'REF DUTY'}
                                   </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 bg-[#7c1229]/10 text-[#7c1229] rounded text-xs font-medium">
-                                    Zone {fixture.zone}
-                                  </span>
-                                )
-                              )}
-                            </div>
-                            <div className="text-gray-700">
-                              <span className="font-medium">vs</span> {opponent.name}
-                            </div>
-                          </div>
-                        );
-                      })}
+                                </div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <MapPin size={18} className="text-gray-500" />
+                                  <span className="font-medium text-gray-900">Pitch {item.pitch}</span>
+                                  {item.zone && (
+                                    <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-medium">
+                                      Zone {item.zone}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-gray-700 text-sm">
+                                  {item.team1.name} vs {item.team2.name}
+                                </div>
+                                {item.refereeConflict && (
+                                  <div className="text-xs text-red-600 font-medium mt-1">Your team is also playing this round</div>
+                                )}
+                              </div>
+                            );
+                          }
+                        });
+                      })()}
                     </div>
                   </div>
                 ) : (
@@ -1610,6 +1931,11 @@
                                 <div className="text-gray-500 text-sm my-1">vs</div>
                                 <div className="font-medium">{f.team2.name}</div>
                               </div>
+                              {f.referee && (
+                                <div className={`text-xs mt-2 ${f.refereeConflict ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                                  Ref: {f.referee.name}{f.refereeConflict ? ' (conflict)' : ''}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1634,6 +1960,11 @@
                                 <div className="text-gray-500 my-1">vs</div>
                                 <div>{f.team2.name}</div>
                               </div>
+                              {f.referee && (
+                                <div className={`text-xs mt-1 ${f.refereeConflict ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                                  Ref: {f.referee.name}{f.refereeConflict ? ' (conflict)' : ''}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1658,6 +1989,11 @@
                                 <div className="text-gray-500 my-1">vs</div>
                                 <div>{f.team2.name}</div>
                               </div>
+                              {f.referee && (
+                                <div className={`text-xs mt-1 ${f.refereeConflict ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                                  Ref: {f.referee.name}{f.refereeConflict ? ' (conflict)' : ''}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
