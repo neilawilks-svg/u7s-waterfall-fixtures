@@ -249,6 +249,12 @@
             }
           }, [showSitePlan]);
 
+          useEffect(() => {
+            if (selectedTeam) {
+              window.scrollTo(0, 0);
+            }
+          }, [selectedTeam]);
+
           const loadFixtures = async () => {
             try {
               const result = await window.storage.get('rugby-fixtures');
