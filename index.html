@@ -1298,6 +1298,113 @@
             }
           };
 
+          const downloadTeamFixturePDF = async (team) => {
+            try {
+              // Lazy-load jsPDF + autoTable from CDN
+              if (!window.jspdf) {
+                const s1 = document.createElement('script');
+                s1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
+                await new Promise((resolve, reject) => { s1.onload = resolve; s1.onerror = reject; document.head.appendChild(s1); });
+              }
+              if (!window.jspdf_autotable) {
+                const s2 = document.createElement('script');
+                s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js';
+                await new Promise((resolve, reject) => { s2.onload = resolve; s2.onerror = reject; document.head.appendChild(s2); });
+              }
+
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+              const pageW = doc.internal.pageSize.getWidth();
+              const margin = 10;
+
+              // Title
+              doc.setFontSize(18);
+              doc.setFont(undefined, 'bold');
+              doc.setTextColor(124, 18, 41);
+              doc.text(team.name, pageW / 2, margin + 6, { align: 'center' });
+              doc.setFontSize(10);
+              doc.setFont(undefined, 'normal');
+              doc.setTextColor(100, 100, 100);
+              doc.text(team.club + (team.zone ? '  |  Zone ' + team.zone : ''), pageW / 2, margin + 12, { align: 'center' });
+
+              // Build combined schedule
+              const teamMatches = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id);
+              const refDuties = fixtures.filter(f => f.referee && f.referee.id === team.id);
+              const schedule = [];
+
+              teamMatches.forEach((f, idx) => {
+                const opp = f.team1.id === team.id ? f.team2 : f.team1;
+                const isAway = team.zone && f.zone !== team.zone;
+                schedule.push({
+                  time: f.time, type: 'MATCH ' + (idx + 1), pitch: 'Pitch ' + f.pitch,
+                  detail: 'vs ' + opp.name + ' (' + opp.club + ')',
+                  note: isAway ? 'AWAY - Zone ' + f.zone : (f.zone ? 'Zone ' + f.zone : ''),
+                  isRef: false, isConflict: false
+                });
+              });
+              refDuties.forEach(f => {
+                schedule.push({
+                  time: f.time, type: 'REF DUTY', pitch: 'Pitch ' + f.pitch,
+                  detail: f.team1.name + ' vs ' + f.team2.name,
+                  note: f.refereeConflict ? 'CONFLICT' : '',
+                  isRef: true, isConflict: f.refereeConflict
+                });
+              });
+              schedule.sort((a, b) => a.time.localeCompare(b.time) || (a.isRef ? 1 : -1));
+
+              const tableHead = [['Time', 'Type', 'Location', 'Detail', 'Note']];
+              const tableBody = schedule.map(s => [s.time, s.type, s.pitch, s.detail, s.note]);
+
+              doc.autoTable({
+                startY: margin + 18,
+                head: tableHead,
+                body: tableBody,
+                theme: 'grid',
+                styles: { fontSize: 9, cellPadding: 3 },
+                headStyles: { fillColor: [124, 18, 41], fontSize: 9, cellPadding: 3, halign: 'center' },
+                columnStyles: {
+                  0: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
+                  1: { cellWidth: 24, halign: 'center' },
+                  2: { cellWidth: 22, halign: 'center' },
+                  3: { cellWidth: 'auto' },
+                  4: { cellWidth: 30 },
+                },
+                margin: { left: margin, right: margin },
+                didParseCell: (data) => {
+                  if (data.section === 'body') {
+                    const row = data.row.raw;
+                    // Ref duty rows get blue background
+                    if (row[1] === 'REF DUTY') {
+                      data.cell.styles.fillColor = [219, 234, 254];
+                    }
+                    // Conflict note in red
+                    if (row[4] === 'CONFLICT') {
+                      data.cell.styles.textColor = [220, 38, 38];
+                      data.cell.styles.fontStyle = 'bold';
+                    }
+                    // Away note in amber
+                    if (typeof row[4] === 'string' && row[4].startsWith('AWAY')) {
+                      data.cell.styles.textColor = [180, 83, 9];
+                      data.cell.styles.fontStyle = 'bold';
+                    }
+                  }
+                },
+              });
+
+              // Footer
+              const finalY = doc.lastAutoTable.finalY + 6;
+              doc.setFontSize(7);
+              doc.setTextColor(150, 150, 150);
+              doc.text('Generated ' + new Date().toLocaleDateString(), pageW / 2, finalY, { align: 'center' });
+
+              const safeName = team.name.replace(/[^a-zA-Z0-9]/g, '_');
+              doc.save(safeName + '_Fixtures.pdf');
+            } catch (err) {
+              setError('Error generating team fixture PDF: ' + err.message);
+              console.error(err);
+            }
+          };
+
           const downloadClubPack = async (clubName) => {
             try {
               if (!window.XLSX) {
@@ -1904,7 +2011,13 @@
                   </div>
                 ) : selectedTeam ? (
                   <div>
-                    <button onClick={() => setSelectedTeam(null)} className="mb-4 text-[#7c1229] font-medium">← Back to all fixtures</button>
+                    <div className="flex items-center justify-between mb-4">
+                      <button onClick={() => setSelectedTeam(null)} className="text-[#7c1229] font-medium">← Back to all fixtures</button>
+                      <button onClick={() => downloadTeamFixturePDF(selectedTeam)} className="flex items-center gap-1.5 bg-[#7c1229] hover:bg-[#5a0d1e] text-white px-3 py-1.5 rounded-lg transition-colors text-sm font-medium">
+                        <Download size={16} />
+                        <span>Download PDF</span>
+                      </button>
+                    </div>
                     <div className="bg-white rounded-lg shadow-lg mb-4 overflow-hidden">
                       <div className="flex">
                         <div className="p-4 flex-shrink-0">
