@@ -12,7 +12,7 @@ export default function PublicView(props) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
-      <div className="bg-[#7c1229] text-white p-4 sticky top-0 z-10 shadow-lg">
+      <div className="bg-[#7c1229] text-white p-4 shadow-lg">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-2xl font-bold">U7's Waterfall</h1>
