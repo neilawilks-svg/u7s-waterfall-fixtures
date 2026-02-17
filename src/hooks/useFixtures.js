@@ -404,20 +404,17 @@ export function useFixtures() {
   useEffect(() => {
     if (showSitePlan) {
       document.body.style.overflow = 'hidden';
-      document.documentElement.style.touchAction = 'none';
       const handleKeyDown = (e) => {
         if (e.key === 'Escape') setShowSitePlan(false);
       };
       window.addEventListener('keydown', handleKeyDown);
       return () => {
         document.body.style.overflow = '';
-        document.documentElement.style.touchAction = '';
         window.removeEventListener('keydown', handleKeyDown);
         setSitePlanZoom(1);
       };
     } else {
       document.body.style.overflow = '';
-      document.documentElement.style.touchAction = '';
     }
   }, [showSitePlan]);
 
