@@ -9,8 +9,10 @@ import { loadTeamsFromCSV } from '../utils/csvParser';
 import { generateFixtureSet, generateSampleTeams } from '../utils/fixtureGenerator';
 
 export function useFixtures() {
+  const hash = window.location.hash.replace('#', '');
   const urlParams = new URLSearchParams(window.location.search);
-  const initialView = urlParams.get('view') === 'public' ? 'public' : 'admin';
+  const initialView = hash === 'admin' || urlParams.get('view') === 'admin' ? 'admin' : 'public';
+
 
   const [view] = useState(initialView);
   const [teams, setTeams] = useState([]);
