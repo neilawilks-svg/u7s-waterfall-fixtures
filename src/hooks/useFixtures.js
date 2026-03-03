@@ -25,6 +25,7 @@ export function useFixtures() {
   const [numPitches, setNumPitches] = useState(16);
   const [matchDuration, setMatchDuration] = useState(15);
   const [startTime, setStartTime] = useState('10:30');
+  const [endTime, setEndTime] = useState('14:00');
   const [numRounds, setNumRounds] = useState(7);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -353,6 +354,7 @@ export function useFixtures() {
         numRounds,
         matchDuration,
         startTime,
+        endTime,
         lunchEnabled,
         lunchStart,
         lunchEnd,
@@ -492,6 +494,7 @@ export function useFixtures() {
     numPitches, setNumPitches,
     matchDuration, setMatchDuration,
     startTime, setStartTime,
+    endTime, setEndTime,
     numRounds, setNumRounds,
     loading, setLoading,
     error, setError,

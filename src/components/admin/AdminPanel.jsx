@@ -40,6 +40,8 @@ export default function AdminPanel(props) {
             setMatchDuration={props.setMatchDuration}
             startTime={props.startTime}
             setStartTime={props.setStartTime}
+            endTime={props.endTime}
+            setEndTime={props.setEndTime}
             lunchEnabled={props.lunchEnabled}
             setLunchEnabled={props.setLunchEnabled}
             lunchStart={props.lunchStart}
