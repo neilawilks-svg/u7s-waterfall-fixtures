@@ -21,7 +21,7 @@ export const generateSampleTeams = () => {
   return sampleTeams;
 };
 
-export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration, startTime, lunchEnabled, lunchStart, lunchEnd }) => {
+export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration, startTime, endTime, lunchEnabled, lunchStart, lunchEnd }) => {
   const teamList = teams.length > 0 ? [...teams] : generateSampleTeams();
 
   // Phase 0: Zone setup
@@ -62,7 +62,17 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
   };
 
   // Phase 1 & 2: Round-by-round generation
+  let stoppedByEndTime = false;
   while (totalRounds < maxRounds) {
+    // Stop if this round would finish after the end time
+    if (endTime) {
+      const roundEndTime = addMinutes(currentTime, matchDuration);
+      if (roundEndTime > endTime) {
+        stoppedByEndTime = true;
+        break;
+      }
+    }
+
     const teamsNeedingMatches = teamList.filter(t => teamFixtureCounts[t.id] < numRounds);
     if (teamsNeedingMatches.length === 0) break;
 
@@ -172,6 +182,9 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
   summary += `${teamsWithTarget}/${teamList.length} teams have exactly ${numRounds} matches. `;
   summary += `${intraPercent}% intra-zone, ${100 - intraPercent}% cross-zone. `;
   summary += `Referees: ${allFixtures.length - conflictCount} clean, ${conflictCount - unassignedCount} conflicts, ${unassignedCount} unassigned.`;
+  if (stoppedByEndTime) {
+    summary += ` Schedule limited by end time (${endTime}).`;
+  }
 
   return { fixtures: allFixtures, teams: teamList, zones: zoneList, summary };
 };

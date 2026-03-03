@@ -6,6 +6,7 @@ export default function GenerationParams({
   numPitches, setNumPitches,
   matchDuration, setMatchDuration,
   startTime, setStartTime,
+  endTime, setEndTime,
   lunchEnabled, setLunchEnabled,
   lunchStart, setLunchStart,
   lunchEnd, setLunchEnd,
@@ -13,7 +14,7 @@ export default function GenerationParams({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Number of Rounds</label>
           <input type="number" value={numRounds} onChange={(e) => setNumRounds(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="12" />
@@ -30,6 +31,11 @@ export default function GenerationParams({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
           <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">End Time</label>
+          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+          <p className="text-xs text-gray-600 mt-1">Must finish by</p>
         </div>
       </div>
       <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
