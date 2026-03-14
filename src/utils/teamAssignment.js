@@ -78,12 +78,6 @@ export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, t
         if (t2Idle >= 2) score += 300;
         else if (t2Idle === 1) score += 80;
       }
-      // Back-to-back penalty: discourage teams playing consecutive rounds
-      if (teamLastPlayedRound && currentRound > 0) {
-        const backToBackPenalty = isPreLunch ? 50 : 90;
-        if (teamLastPlayedRound[t1.id] === currentRound - 1) score -= backToBackPenalty;
-        if (teamLastPlayedRound[t2.id] === currentRound - 1) score -= backToBackPenalty;
-      }
       if (score > bestScore) {
         bestScore = score;
         bestMatch = { t1, t2, matchupKey };
