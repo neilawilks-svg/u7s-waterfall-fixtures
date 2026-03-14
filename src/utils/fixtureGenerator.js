@@ -42,16 +42,18 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
   const playedMatchups = new Set();
   const clubMatchupsPerTeam = {};
 
+  const teamLastPlayedRound = {};
   teamList.forEach(t => {
     teamFixtureCounts[t.id] = 0;
     clubMatchupsPerTeam[t.id] = new Set();
+    teamLastPlayedRound[t.id] = -1;
   });
 
   let totalRounds = 0;
   const maxRounds = numRounds * 3;
   let currentTime = startTime;
 
-  const recordMatch = (t1, t2, matchupKey, usedSet) => {
+  const recordMatch = (t1, t2, matchupKey, usedSet, clubUsage, roundNum) => {
     playedMatchups.add(matchupKey);
     teamFixtureCounts[t1.id]++;
     teamFixtureCounts[t2.id]++;
@@ -59,6 +61,10 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
     usedSet.add(t2.id);
     clubMatchupsPerTeam[t1.id].add(t2.club);
     clubMatchupsPerTeam[t2.id].add(t1.club);
+    clubUsage[t1.club] = (clubUsage[t1.club] || 0) + 1;
+    clubUsage[t2.club] = (clubUsage[t2.club] || 0) + 1;
+    teamLastPlayedRound[t1.id] = roundNum;
+    teamLastPlayedRound[t2.id] = roundNum;
   };
 
   // Phase 1 & 2: Round-by-round generation
@@ -77,6 +83,8 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
     if (teamsNeedingMatches.length === 0) break;
 
     const usedTeamsThisRound = new Set();
+    const clubUsageThisRound = {};
+    const isPreLunch = lunchEnabled && currentTime < lunchStart;
     const roundFixtures = [];
     const filledPitches = new Set();
 
@@ -89,7 +97,7 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
         );
         if (availableInZone.length < 2) break;
 
-        const match = findBestMatch(availableInZone, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+        const match = findBestMatch(availableInZone, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds, isPreLunch);
         if (!match) break;
 
         const { t1, t2, matchupKey } = match;
@@ -103,7 +111,7 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
           zone: zone.id,
           isCrossZone: false,
         });
-        recordMatch(t1, t2, matchupKey, usedTeamsThisRound);
+        recordMatch(t1, t2, matchupKey, usedTeamsThisRound, clubUsageThisRound, totalRounds);
         filledPitches.add(pitch);
       }
     }
@@ -126,7 +134,7 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
         }
         if (candidates.length < 2) continue;
 
-        const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+        const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds, isPreLunch);
         if (!match) continue;
 
         const { t1, t2, matchupKey } = match;
@@ -140,7 +148,7 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
           zone: zone.id,
           isCrossZone: t1.zone !== t2.zone,
         });
-        recordMatch(t1, t2, matchupKey, usedTeamsThisRound);
+        recordMatch(t1, t2, matchupKey, usedTeamsThisRound, clubUsageThisRound, totalRounds);
         filledPitches.add(pitch);
       }
     }

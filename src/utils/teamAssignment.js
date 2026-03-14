@@ -37,7 +37,7 @@ export const assignTeamsToZones = (teamList, zoneList) => {
   return zoneList;
 };
 
-export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, targetRounds, adjacency) => {
+export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, targetRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, currentRound, isPreLunch) => {
   let bestMatch = null;
   let bestScore = -Infinity;
   for (let i = 0; i < candidates.length; i++) {
@@ -63,6 +63,20 @@ export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, t
         } else if (adjacency && adjacency[t1.zone] && adjacency[t1.zone].indexOf(t2.zone) < 2) {
           score += 50;
         }
+      }
+      // Club spread: discourage too many teams from same club in one round
+      if (clubUsageThisRound) {
+        score -= (clubUsageThisRound[t1.club] || 0) * 40;
+        score -= (clubUsageThisRound[t2.club] || 0) * 40;
+      }
+      // Pre-lunch rest gap: prioritize teams idle too long before lunch
+      if (isPreLunch && teamLastPlayedRound) {
+        const t1Idle = currentRound - (teamLastPlayedRound[t1.id] ?? -1) - 1;
+        const t2Idle = currentRound - (teamLastPlayedRound[t2.id] ?? -1) - 1;
+        if (t1Idle >= 2) score += 300;
+        else if (t1Idle === 1) score += 80;
+        if (t2Idle >= 2) score += 300;
+        else if (t2Idle === 1) score += 80;
       }
       if (score > bestScore) {
         bestScore = score;

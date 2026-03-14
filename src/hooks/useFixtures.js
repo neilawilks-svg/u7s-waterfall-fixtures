@@ -191,7 +191,7 @@ export function useFixtures() {
           const pitch = zone.pitches[pitchSlot];
           const available = zone.teams.filter(t => !usedTeams.has(t.id) && teamFixtureCounts[t.id] < numRounds);
           if (available.length < 2) break;
-          const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+          const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, {}, {}, 0, false);
           if (!match) break;
           newRoundFixtures.push({
             id: `fixture-${roundNum - 1}-${pitch}`,
@@ -220,7 +220,7 @@ export function useFixtures() {
             });
           }
           if (candidates.length < 2) continue;
-          const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+          const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, {}, {}, 0, false);
           if (!match) continue;
           newRoundFixtures.push({
             id: `fixture-${roundNum - 1}-${pitch}`,
