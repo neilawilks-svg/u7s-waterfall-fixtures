@@ -37,7 +37,7 @@ export const assignTeamsToZones = (teamList, zoneList) => {
   return zoneList;
 };
 
-export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, targetRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, currentRound, isPreLunch) => {
+export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, targetRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, currentRound) => {
   let bestMatch = null;
   let bestScore = -Infinity;
   for (let i = 0; i < candidates.length; i++) {
@@ -69,16 +69,15 @@ export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, t
         score -= (clubUsageThisRound[t1.club] || 0) * 40;
         score -= (clubUsageThisRound[t2.club] || 0) * 40;
       }
-      // Pre-lunch rest gap: prioritize teams idle too long before lunch
+      // Rest gap: no team misses more than 2 consecutive rounds
       // Bonuses must overwhelm all other factors combined (~1000 max)
-      // to enforce the hard rule: no team misses more than 1 round
-      if (isPreLunch && teamLastPlayedRound) {
+      if (teamLastPlayedRound) {
         const t1Idle = currentRound - (teamLastPlayedRound[t1.id] ?? -1) - 1;
         const t2Idle = currentRound - (teamLastPlayedRound[t2.id] ?? -1) - 1;
-        if (t1Idle >= 2) score += 2000;
-        else if (t1Idle === 1) score += 1000;
-        if (t2Idle >= 2) score += 2000;
-        else if (t2Idle === 1) score += 1000;
+        if (t1Idle >= 3) score += 2000;
+        else if (t1Idle >= 2) score += 1000;
+        if (t2Idle >= 3) score += 2000;
+        else if (t2Idle >= 2) score += 1000;
       }
       if (score > bestScore) {
         bestScore = score;

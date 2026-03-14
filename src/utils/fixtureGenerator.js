@@ -69,6 +69,7 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
 
   // Phase 1 & 2: Round-by-round generation
   let stoppedByEndTime = false;
+  let lastPreLunchTeams = null;
   while (totalRounds < maxRounds) {
     // Stop if this round would finish after the end time
     if (endTime) {
@@ -84,7 +85,6 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
 
     const usedTeamsThisRound = new Set();
     const clubUsageThisRound = {};
-    const isPreLunch = lunchEnabled && currentTime < lunchStart;
     const roundFixtures = [];
     const filledPitches = new Set();
 
@@ -93,11 +93,13 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
       for (let pitchSlot = 0; pitchSlot < 2; pitchSlot++) {
         const pitch = zone.pitches[pitchSlot];
         const availableInZone = zone.teams.filter(
-          t => !usedTeamsThisRound.has(t.id) && teamFixtureCounts[t.id] < numRounds
+          t => !usedTeamsThisRound.has(t.id)
+            && teamFixtureCounts[t.id] < numRounds
+            && !(lastPreLunchTeams && lastPreLunchTeams.has(t.id))
         );
         if (availableInZone.length < 2) break;
 
-        const match = findBestMatch(availableInZone, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds, isPreLunch);
+        const match = findBestMatch(availableInZone, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds);
         if (!match) break;
 
         const { t1, t2, matchupKey } = match;
@@ -127,14 +129,16 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
           const z = zoneList.find(zz => zz.id === zId);
           if (!z) continue;
           z.teams.forEach(t => {
-            if (!usedTeamsThisRound.has(t.id) && teamFixtureCounts[t.id] < numRounds) {
+            if (!usedTeamsThisRound.has(t.id)
+                && teamFixtureCounts[t.id] < numRounds
+                && !(lastPreLunchTeams && lastPreLunchTeams.has(t.id))) {
               candidates.push(t);
             }
           });
         }
         if (candidates.length < 2) continue;
 
-        const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds, isPreLunch);
+        const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds);
         if (!match) continue;
 
         const { t1, t2, matchupKey } = match;
@@ -159,9 +163,19 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
       break;
     }
 
+    // Clear lunch exclusion after the first post-lunch round has been generated
+    if (lastPreLunchTeams) {
+      lastPreLunchTeams = null;
+    }
+
     totalRounds++;
     let nextTime = addMinutes(currentTime, matchDuration);
     currentTime = getNextAvailableTime(nextTime, lunchEnabled, lunchStart, lunchEnd);
+
+    // Detect if we just crossed lunch — record who played the last pre-lunch round
+    if (lunchEnabled && currentTime !== nextTime) {
+      lastPreLunchTeams = new Set(usedTeamsThisRound);
+    }
   }
 
   if (allFixtures.length === 0) {
