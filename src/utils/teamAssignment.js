@@ -53,8 +53,13 @@ export const findBestMatch = (candidates, playedMatchups, clubMatchupsPerTeam, t
       if (!t1PlayedClub && !t2PlayedClub) score += 100;
       else if (!t1PlayedClub || !t2PlayedClub) score += 50;
       else score -= 100;
-      score += (targetRounds - teamFixtureCounts[t1.id]) * 20;
-      score += (targetRounds - teamFixtureCounts[t2.id]) * 20;
+      const t1Deficit = targetRounds - teamFixtureCounts[t1.id];
+      const t2Deficit = targetRounds - teamFixtureCounts[t2.id];
+      score += t1Deficit * 50;
+      score += t2Deficit * 50;
+      // Extra boost for severely under-matched teams (below half of target)
+      if (teamFixtureCounts[t1.id] < targetRounds / 2) score += 500;
+      if (teamFixtureCounts[t2.id] < targetRounds / 2) score += 500;
       score += (10 - clubMatchupsPerTeam[t1.id].size) * 5;
       score += (10 - clubMatchupsPerTeam[t2.id].size) * 5;
       if (t1.zone && t2.zone) {

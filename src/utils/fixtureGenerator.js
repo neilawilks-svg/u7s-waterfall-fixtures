@@ -178,6 +178,88 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
     }
   }
 
+  // Phase 3: Fairness catch-up rounds — target under-matched teams with relaxed zone constraints
+  const allPitches = zoneList.flatMap(z => z.pitches);
+  const minMatches = Math.max(1, Math.floor((activePitchCount * 2 * totalRounds) / teamList.length) - 1);
+  let fairnessTeams = teamList.filter(t => teamFixtureCounts[t.id] < minMatches);
+
+  while (fairnessTeams.length >= 2 && totalRounds < maxRounds) {
+    if (endTime) {
+      const roundEndTime = addMinutes(currentTime, matchDuration);
+      if (roundEndTime > endTime) {
+        stoppedByEndTime = true;
+        break;
+      }
+    }
+
+    const usedTeamsThisRound = new Set();
+    const clubUsageThisRound = {};
+    const roundFixtures = [];
+    let pitchIndex = 0;
+
+    // Fill pitches with under-matched teams first
+    while (pitchIndex < allPitches.length) {
+      const available = fairnessTeams.filter(t => !usedTeamsThisRound.has(t.id));
+      if (available.length < 2) break;
+      const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam,
+        teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds);
+      if (!match) break;
+
+      const { t1, t2, matchupKey } = match;
+      roundFixtures.push({
+        id: `fixture-${totalRounds}-${allPitches[pitchIndex]}`,
+        round: totalRounds + 1,
+        pitch: allPitches[pitchIndex],
+        time: currentTime,
+        team1: t1,
+        team2: t2,
+        zone: t1.zone || t2.zone,
+        isCrossZone: t1.zone !== t2.zone,
+      });
+      recordMatch(t1, t2, matchupKey, usedTeamsThisRound, clubUsageThisRound, totalRounds);
+      pitchIndex++;
+    }
+
+    // Fill remaining pitches with any team that still needs matches
+    while (pitchIndex < allPitches.length) {
+      const available = teamList.filter(t =>
+        !usedTeamsThisRound.has(t.id) && teamFixtureCounts[t.id] < numRounds
+        && !(lastPreLunchTeams && lastPreLunchTeams.has(t.id))
+      );
+      if (available.length < 2) break;
+      const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam,
+        teamFixtureCounts, numRounds, adjacency, clubUsageThisRound, teamLastPlayedRound, totalRounds);
+      if (!match) break;
+
+      const { t1, t2, matchupKey } = match;
+      roundFixtures.push({
+        id: `fixture-${totalRounds}-${allPitches[pitchIndex]}`,
+        round: totalRounds + 1,
+        pitch: allPitches[pitchIndex],
+        time: currentTime,
+        team1: t1,
+        team2: t2,
+        zone: t1.zone || t2.zone,
+        isCrossZone: t1.zone !== t2.zone,
+      });
+      recordMatch(t1, t2, matchupKey, usedTeamsThisRound, clubUsageThisRound, totalRounds);
+      pitchIndex++;
+    }
+
+    if (roundFixtures.length === 0) break;
+    allFixtures.push(...roundFixtures);
+
+    if (lastPreLunchTeams) lastPreLunchTeams = null;
+    totalRounds++;
+    let nextTime = addMinutes(currentTime, matchDuration);
+    currentTime = getNextAvailableTime(nextTime, lunchEnabled, lunchStart, lunchEnd);
+    if (lunchEnabled && currentTime !== nextTime) {
+      lastPreLunchTeams = new Set(usedTeamsThisRound);
+    }
+
+    fairnessTeams = teamList.filter(t => teamFixtureCounts[t.id] < minMatches);
+  }
+
   if (allFixtures.length === 0) {
     return null;
   }
