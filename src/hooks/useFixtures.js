@@ -23,6 +23,7 @@ export function useFixtures() {
   const [numPitches, setNumPitches] = useState(16);
   const [matchDuration, setMatchDuration] = useState(15);
   const [startTime, setStartTime] = useState('10:30');
+  const [endTime, setEndTime] = useState('14:00');
   const [numRounds, setNumRounds] = useState(7);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -188,7 +189,7 @@ export function useFixtures() {
           const pitch = zone.pitches[pitchSlot];
           const available = zone.teams.filter(t => !usedTeams.has(t.id) && teamFixtureCounts[t.id] < numRounds);
           if (available.length < 2) break;
-          const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+          const match = findBestMatch(available, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, {}, {}, 0, false);
           if (!match) break;
           newRoundFixtures.push({
             id: `fixture-${roundNum - 1}-${pitch}`,
@@ -217,7 +218,7 @@ export function useFixtures() {
             });
           }
           if (candidates.length < 2) continue;
-          const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency);
+          const match = findBestMatch(candidates, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, {}, {}, 0, false);
           if (!match) continue;
           newRoundFixtures.push({
             id: `fixture-${roundNum - 1}-${pitch}`,
@@ -351,6 +352,7 @@ export function useFixtures() {
         numRounds,
         matchDuration,
         startTime,
+        endTime,
         lunchEnabled,
         lunchStart,
         lunchEnd,
@@ -490,6 +492,7 @@ export function useFixtures() {
     numPitches, setNumPitches,
     matchDuration, setMatchDuration,
     startTime, setStartTime,
+    endTime, setEndTime,
     numRounds, setNumRounds,
     loading, setLoading,
     error, setError,
