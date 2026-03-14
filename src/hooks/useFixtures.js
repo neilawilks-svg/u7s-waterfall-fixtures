@@ -26,7 +26,7 @@ export function useFixtures() {
   const [matchDuration, setMatchDuration] = useState(15);
   const [startTime, setStartTime] = useState('10:30');
   const [endTime, setEndTime] = useState('14:00');
-  const [numRounds, setNumRounds] = useState(7);
+  const [numRounds, setNumRounds] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sheetUrl, setSheetUrl] = useState(DEFAULT_SHEET_URL);
