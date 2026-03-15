@@ -41,6 +41,7 @@ export function useFixtures() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [fixtureHistory, setFixtureHistory] = useState([]);
   const [swapMode, setSwapMode] = useState(null);
+  const [fixtureSwapMode, setFixtureSwapMode] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notifiedFixtures, setNotifiedFixtures] = useState(new Set());
@@ -153,6 +154,32 @@ export function useFixtures() {
     await saveFixtures(updated, teams, zones);
     setSwapMode(null);
     setError(`Swapped ${srcTeam.name} with ${destTeam.name}`);
+  };
+
+  const swapFixturesBetweenRounds = async (destFixtureId) => {
+    if (!fixtureSwapMode) return;
+    const srcFixture = fixtures.find(f => f.id === fixtureSwapMode.fixtureId);
+    const destFixture = fixtures.find(f => f.id === destFixtureId);
+    if (!srcFixture || !destFixture || srcFixture.id === destFixture.id) return;
+
+    const updated = fixtures.map(f => {
+      if (f.id === srcFixture.id) {
+        return { ...f, round: destFixture.round, time: destFixture.time,
+                 pitch: destFixture.pitch, zone: destFixture.zone,
+                 isCrossZone: destFixture.isCrossZone };
+      }
+      if (f.id === destFixture.id) {
+        return { ...f, round: srcFixture.round, time: srcFixture.time,
+                 pitch: srcFixture.pitch, zone: srcFixture.zone,
+                 isCrossZone: srcFixture.isCrossZone };
+      }
+      return f;
+    });
+
+    setFixtures(updated);
+    await saveFixtures(updated, teams, zones);
+    setFixtureSwapMode(null);
+    setError(`Swapped round position: ${srcFixture.team1.name} vs ${srcFixture.team2.name} (Round ${srcFixture.round} → Round ${destFixture.round})`);
   };
 
   const regenerateRound = async (roundNum) => {
@@ -511,6 +538,7 @@ export function useFixtures() {
     passwordInput, setPasswordInput,
     fixtureHistory, setFixtureHistory,
     swapMode, setSwapMode,
+    fixtureSwapMode, setFixtureSwapMode, swapFixturesBetweenRounds,
     pdfLoading, setPdfLoading,
     notificationsEnabled, setNotificationsEnabled,
     filteredTeams,
