@@ -34,6 +34,8 @@ export default function AdminPanel(props) {
           <GenerationParams
             numRounds={props.numRounds}
             setNumRounds={props.setNumRounds}
+            minMatches={props.minMatches}
+            setMinMatches={props.setMinMatches}
             numPitches={props.numPitches}
             setNumPitches={props.setNumPitches}
             matchDuration={props.matchDuration}

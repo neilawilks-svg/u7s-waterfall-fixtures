@@ -3,6 +3,7 @@ import { RefreshCw } from '../icons';
 
 export default function GenerationParams({
   numRounds, setNumRounds,
+  minMatches, setMinMatches,
   numPitches, setNumPitches,
   matchDuration, setMatchDuration,
   startTime, setStartTime,
@@ -14,11 +15,16 @@ export default function GenerationParams({
 }) {
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Number of Rounds</label>
           <input type="number" value={numRounds} onChange={(e) => setNumRounds(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="4" max="12" />
-          <p className="text-xs text-gray-600 mt-1">Matches per team</p>
+          <p className="text-xs text-gray-600 mt-1">Target matches per team</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Minimum Matches</label>
+          <input type="number" value={minMatches} onChange={(e) => setMinMatches(parseInt(e.target.value))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" min="1" max={numRounds} />
+          <p className="text-xs text-gray-600 mt-1">Every team must play at least this many</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Number of Pitches</label>

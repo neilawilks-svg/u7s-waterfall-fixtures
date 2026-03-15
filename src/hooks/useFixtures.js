@@ -27,6 +27,7 @@ export function useFixtures() {
   const [startTime, setStartTime] = useState('10:30');
   const [endTime, setEndTime] = useState('14:00');
   const [numRounds, setNumRounds] = useState(7);
+  const [minMatches, setMinMatches] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sheetUrl, setSheetUrl] = useState(DEFAULT_SHEET_URL);
@@ -352,6 +353,7 @@ export function useFixtures() {
         teams,
         numPitches,
         numRounds,
+        minMatches,
         matchDuration,
         startTime,
         endTime,
@@ -496,6 +498,7 @@ export function useFixtures() {
     startTime, setStartTime,
     endTime, setEndTime,
     numRounds, setNumRounds,
+    minMatches, setMinMatches,
     loading, setLoading,
     error, setError,
     sheetUrl, setSheetUrl,

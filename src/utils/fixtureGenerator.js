@@ -21,7 +21,8 @@ export const generateSampleTeams = () => {
   return sampleTeams;
 };
 
-export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration, startTime, endTime, lunchEnabled, lunchStart, lunchEnd }) => {
+export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, matchDuration, startTime, endTime, lunchEnabled, lunchStart, lunchEnd }) => {
+  const effectiveMin = (minMatches != null && minMatches > 0) ? minMatches : numRounds;
   const teamList = teams.length > 0 ? [...teams] : generateSampleTeams();
 
   // Phase 0: Zone setup
@@ -168,6 +169,65 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
     return null;
   }
 
+  // Minimum match enforcement: backfill spare pitch slots for under-served teams
+  const allPitches = zoneList.flatMap(z => z.pitches);
+  let relaxedMatchCount = 0;
+
+  // Build per-round state from generated fixtures
+  const roundsMap = new Map();
+  allFixtures.forEach(f => {
+    if (!roundsMap.has(f.round)) {
+      roundsMap.set(f.round, { filledPitches: new Set(), usedTeams: new Set(), time: f.time });
+    }
+    const rd = roundsMap.get(f.round);
+    rd.filledPitches.add(f.pitch);
+    rd.usedTeams.add(f.team1.id);
+    rd.usedTeams.add(f.team2.id);
+  });
+
+  // Sort rounds by fewest fixtures (most spare capacity first)
+  const sortedRounds = [...roundsMap.entries()].sort(
+    (a, b) => a[1].filledPitches.size - b[1].filledPitches.size
+  );
+
+  for (const [roundNum, roundData] of sortedRounds) {
+    const sparePitches = allPitches.filter(p => !roundData.filledPitches.has(p));
+    if (sparePitches.length === 0) continue;
+
+    for (const pitch of sparePitches) {
+      const eligibleTeams = teamList.filter(
+        t => teamFixtureCounts[t.id] < effectiveMin && !roundData.usedTeams.has(t.id)
+      );
+      if (eligibleTeams.length < 2) break;
+
+      // Try strict matching first (no exact rematches)
+      let match = findBestMatch(eligibleTeams, playedMatchups, clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, {}, teamLastPlayedRound, roundNum - 1, false);
+
+      // Relax: allow rematches if strict yields nothing
+      if (!match) {
+        match = findBestMatch(eligibleTeams, new Set(), clubMatchupsPerTeam, teamFixtureCounts, numRounds, adjacency, {}, teamLastPlayedRound, roundNum - 1, false);
+        if (match) relaxedMatchCount++;
+      }
+
+      if (!match) continue;
+
+      const { t1, t2, matchupKey } = match;
+      const zone = zoneList.find(z => z.pitches.includes(pitch)) || zoneList[0];
+      allFixtures.push({
+        id: `fixture-backfill-${roundNum}-${pitch}`,
+        round: roundNum,
+        pitch,
+        time: roundData.time,
+        team1: t1,
+        team2: t2,
+        zone: zone.id,
+        isCrossZone: t1.zone !== t2.zone,
+      });
+      recordMatch(t1, t2, matchupKey, roundData.usedTeams, {}, roundNum - 1);
+      roundData.filledPitches.add(pitch);
+    }
+  }
+
   // Assign referees to all fixtures
   assignReferees(allFixtures, zoneList);
 
@@ -177,6 +237,7 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
   const maxFixtures = Math.max(...fixtureCounts);
   const avgFixtures = (fixtureCounts.reduce((a, b) => a + b, 0) / fixtureCounts.length).toFixed(1);
   const teamsWithTarget = fixtureCounts.filter(c => c === numRounds).length;
+  const teamsUnderMinimum = teamList.filter(t => teamFixtureCounts[t.id] < effectiveMin);
 
   const intraZoneCount = allFixtures.filter(f => !f.isCrossZone).length;
   const crossZoneCount = allFixtures.filter(f => f.isCrossZone).length;
@@ -193,6 +254,12 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, matchDuration
   if (stoppedByEndTime) {
     summary += ` Schedule limited by end time (${endTime}).`;
   }
+  if (relaxedMatchCount > 0) {
+    summary += ` Backfill used ${relaxedMatchCount} rematch(es) to meet minimum.`;
+  }
+  if (teamsUnderMinimum.length > 0) {
+    summary += ` WARNING: ${teamsUnderMinimum.length} team(s) could not reach the minimum of ${effectiveMin} matches even after backfill: ${teamsUnderMinimum.map(t => t.name).join(', ')}.`;
+  }
 
-  return { fixtures: allFixtures, teams: teamList, zones: zoneList, summary };
+  return { fixtures: allFixtures, teams: teamList, zones: zoneList, summary, teamsUnderMinimum };
 };
