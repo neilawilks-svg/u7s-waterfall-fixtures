@@ -1,20 +1,24 @@
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-// Pre-fetch site plan at module load so the PDF download stays synchronous
-// (browsers can block downloads triggered after async awaits)
-let _sitePlanCache = null;
-const _sitePlanPromise = fetch('/site-plan.png')
-  .then(r => r.blob())
-  .then(blob => new Promise(resolve => {
-    // Force image/png MIME type so jsPDF recognises the format correctly
-    const pngBlob = new Blob([blob], { type: 'image/png' });
-    const reader = new FileReader();
-    reader.onload = e => { _sitePlanCache = e.target.result; resolve(e.target.result); };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(pngBlob);
-  }))
-  .catch(() => null);
+// Pre-load site plan via canvas so jsPDF always receives a valid PNG data URL.
+// Using <img> + canvas handles any source format and avoids MIME-type detection issues.
+let _sitePlanCache = null; // { dataUrl, width, height }
+const _sitePlanPromise = new Promise(resolve => {
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      _sitePlanCache = { dataUrl: canvas.toDataURL('image/png'), width: img.naturalWidth, height: img.naturalHeight };
+      resolve(_sitePlanCache);
+    } catch (e) { resolve(null); }
+  };
+  img.onerror = () => resolve(null);
+  img.src = '/site-plan.png';
+});
 
 export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) => {
   try {
@@ -156,7 +160,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
 export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd) => {
   try {
     // Use pre-cached site plan (loaded at module init); await only if not yet ready
-    const sitePlanData = _sitePlanCache !== null ? _sitePlanCache : await _sitePlanPromise;
+    const sitePlanData = _sitePlanCache ?? await _sitePlanPromise;
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();   // 210
@@ -297,18 +301,16 @@ export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, l
       if (sitePlanData) {
         const tableBottomY = doc.lastAutoTable.finalY + 5;
         const availableH = pageH - margin - tableBottomY;
-        const availableW = usableW;
         if (availableH > 40) {
-          const imgProps = doc.getImageProperties(sitePlanData);
-          const aspect = imgProps.width / imgProps.height;
-          let imgW = availableW;
+          const aspect = sitePlanData.width / sitePlanData.height;
+          let imgW = usableW;
           let imgH = imgW / aspect;
           if (imgH > availableH) {
             imgH = availableH;
             imgW = imgH * aspect;
           }
           const imgX = margin + (usableW - imgW) / 2;
-          doc.addImage(sitePlanData, 'PNG', imgX, tableBottomY, imgW, imgH, undefined, 'FAST');
+          doc.addImage(sitePlanData.dataUrl, 'PNG', imgX, tableBottomY, imgW, imgH, undefined, 'FAST');
         }
       }
     }
