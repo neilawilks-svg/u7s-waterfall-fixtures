@@ -33,11 +33,18 @@ export default function FixturesTable({
             </button>
             <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-72 overflow-y-auto">
               <button
-                onClick={() => downloadAllClubPacksPDF(fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd)}
-                className="w-full flex items-center gap-2 px-4 py-2 border-b-2 border-gray-300 hover:bg-green-50 text-sm text-green-800 font-semibold"
+                onClick={() => downloadAllClubPacksPDF(fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, true)}
+                className="w-full flex items-center gap-2 px-4 py-2 border-b border-gray-200 hover:bg-green-50 text-sm text-green-800 font-semibold"
               >
                 <Download size={14} className="flex-shrink-0" />
                 Download All Clubs
+              </button>
+              <button
+                onClick={() => downloadAllClubPacksPDF(fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, false)}
+                className="w-full flex items-center gap-2 px-4 py-2 border-b-2 border-gray-300 hover:bg-green-50 text-sm text-green-800 font-semibold"
+              >
+                <Download size={14} className="flex-shrink-0" />
+                Download All (No Site Plan)
               </button>
               {clubs.map(club => (
                 <button

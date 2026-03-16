@@ -168,7 +168,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
 
 // Shared helper: writes one club's summary page + per-team pages into an existing doc.
 // Call with addPageFirst=false for the first club in a document, true for subsequent clubs.
-const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, addPageFirst) => {
+const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, addPageFirst, includeSitePlan = true) => {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 10;
@@ -275,7 +275,7 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
       },
     });
 
-    if (sitePlanData) {
+    if (sitePlanData && includeSitePlan) {
       const tableBottomY = doc.lastAutoTable.finalY + 5;
       const availableH = pageH - margin - tableBottomY;
       if (availableH > 40) {
@@ -301,15 +301,15 @@ export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, l
   }
 };
 
-export const downloadAllClubPacksPDF = async (fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd) => {
+export const downloadAllClubPacksPDF = async (fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, includeSitePlan = true) => {
   try {
-    const sitePlanData = _sitePlanCache ?? await _sitePlanPromise;
+    const sitePlanData = includeSitePlan ? (_sitePlanCache ?? await _sitePlanPromise) : null;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const clubs = [...new Set(teams.map(t => t.club))].sort();
     clubs.forEach((club, i) => {
-      writeClubPages(doc, club, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, i > 0);
+      writeClubPages(doc, club, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, i > 0, includeSitePlan);
     });
-    doc.save('All_Clubs_Festival_Pack.pdf');
+    doc.save(includeSitePlan ? 'All_Clubs_Festival_Pack.pdf' : 'All_Clubs_Festival_Pack_No_Site_Plan.pdf');
   } catch (err) {
     setError('Error generating all club packs PDF: ' + err.message);
     console.error(err);
