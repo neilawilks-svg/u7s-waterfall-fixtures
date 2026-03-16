@@ -138,90 +138,176 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
   }
 };
 
-export const downloadClubPackPDF = async (clubName, fixtures, teams, setError) => {
+export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd) => {
   try {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const pageW = doc.internal.pageSize.getWidth();
-    const margin = 8;
+    // Load site plan image
+    let sitePlanData = null;
+    try {
+      const response = await fetch('/site-plan.png');
+      const blob = await response.blob();
+      sitePlanData = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      // Site plan not available, continue without it
+    }
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();   // 210
+    const pageH = doc.internal.pageSize.getHeight();  // 297
+    const margin = 10;
+    const usableW = pageW - 2 * margin;
     const clubTeams = teams.filter(t => t.club === clubName);
 
-    // Title
-    doc.setFontSize(16);
+    // === PAGE 1: Summary ===
+    doc.setFontSize(20);
     doc.setFont(undefined, 'bold');
-    doc.text(clubName + ' - Festival Pack', pageW / 2, margin + 4, { align: 'center' });
-    doc.setFontSize(8);
+    doc.setTextColor(124, 18, 41);
+    doc.text(clubName, pageW / 2, margin + 9, { align: 'center' });
+    doc.setFontSize(11);
     doc.setFont(undefined, 'normal');
-    doc.text('Generated ' + new Date().toLocaleDateString(), pageW / 2, margin + 9, { align: 'center' });
+    doc.setTextColor(80, 80, 80);
+    doc.text('Festival Pack', pageW / 2, margin + 16, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Generated ' + new Date().toLocaleDateString(), pageW / 2, margin + 21, { align: 'center' });
 
-    // Overview table
-    const overviewHead = [['Team', 'Zone', 'Matches', 'Ref Duties', 'Conflicts']];
+    const overviewHead = [['Team', 'Zone', 'Matches', 'Ref Duties']];
     const overviewBody = clubTeams.map(team => {
       const matchCount = fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).length;
       const refCount = fixtures.filter(f => f.referee && f.referee.id === team.id).length;
-      const conflictCount = fixtures.filter(f => f.referee && f.referee.id === team.id && f.refereeConflict).length;
-      return [team.name, team.zone || '-', matchCount, refCount, conflictCount];
+      return [team.name, team.zone || '-', matchCount, refCount];
     });
 
     doc.autoTable({
-      startY: margin + 12,
+      startY: margin + 25,
       head: overviewHead,
       body: overviewBody,
       theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 1.5 },
-      headStyles: { fillColor: [124, 18, 41], fontSize: 7, cellPadding: 1.5 },
+      styles: { fontSize: 10, cellPadding: 3 },
+      headStyles: { fillColor: [124, 18, 41], fontSize: 10, cellPadding: 3, textColor: [255, 255, 255] },
       margin: { left: margin, right: margin },
-      tableWidth: 'wrap',
     });
 
-    // Full schedule table
-    const scheduleHead = [['Team', 'Time', 'Type', 'Pitch', 'Zone', 'Detail', 'Note']];
-    const scheduleBody = [];
-    clubTeams.forEach(team => {
-      const items = [];
-      fixtures.filter(f => f.team1.id === team.id || f.team2.id === team.id).forEach(f => {
+    // === PAGES 2+: One page per team ===
+    for (const team of clubTeams) {
+      doc.addPage();
+
+      // Team header
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(124, 18, 41);
+      doc.text(team.name, pageW / 2, margin + 8, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(100, 100, 100);
+      doc.text(team.club + (team.zone ? '  |  Zone ' + team.zone : ''), pageW / 2, margin + 14, { align: 'center' });
+
+      // Build schedule (matches numbered in time order)
+      const teamMatches = fixtures
+        .filter(f => f.team1.id === team.id || f.team2.id === team.id)
+        .sort((a, b) => a.time.localeCompare(b.time));
+      const refDuties = fixtures.filter(f => f.referee && f.referee.id === team.id);
+      const schedule = [];
+
+      teamMatches.forEach((f, idx) => {
         const opp = f.team1.id === team.id ? f.team2 : f.team1;
-        items.push({ time: f.time, type: 'PLAY', pitch: f.pitch, zone: f.zone || '', detail: 'vs ' + opp.name + ' (' + opp.club + ')', note: '' });
-      });
-      fixtures.filter(f => f.referee && f.referee.id === team.id).forEach(f => {
-        items.push({
-          time: f.time, type: 'REF', pitch: f.pitch, zone: f.zone || '',
-          detail: f.team1.name + ' vs ' + f.team2.name,
-          note: f.refereeConflict ? 'CONFLICT' : '',
+        const isAway = team.zone && f.zone !== team.zone;
+        schedule.push({
+          time: f.time, type: 'MATCH ' + (idx + 1), pitch: 'Pitch ' + f.pitch,
+          detail: 'vs ' + opp.name + ' (' + opp.club + ')',
+          note: isAway ? 'AWAY - Zone ' + f.zone : (f.zone ? 'Zone ' + f.zone : ''),
+          isRef: false, isConflict: false, isLunch: false,
         });
       });
-      items.sort((a, b) => a.time.localeCompare(b.time));
-      items.forEach((s, idx) => {
-        scheduleBody.push([idx === 0 ? team.name : '', s.time, s.type, s.pitch, s.zone, s.detail, s.note]);
+      refDuties.forEach(f => {
+        schedule.push({
+          time: f.time, type: 'REF DUTY', pitch: 'Pitch ' + f.pitch,
+          detail: f.team1.name + ' vs ' + f.team2.name,
+          note: f.refereeConflict ? 'CONFLICT' : '',
+          isRef: true, isConflict: f.refereeConflict, isLunch: false,
+        });
       });
-      scheduleBody.push(['', '', '', '', '', '', '']);
-    });
+      schedule.sort((a, b) => a.time.localeCompare(b.time) || (a.isRef ? 1 : -1));
 
-    doc.autoTable({
-      startY: doc.lastAutoTable.finalY + 4,
-      head: scheduleHead,
-      body: scheduleBody,
-      theme: 'grid',
-      styles: { fontSize: 6.5, cellPadding: 1.2 },
-      headStyles: { fillColor: [124, 18, 41], fontSize: 6.5, cellPadding: 1.2 },
-      columnStyles: {
-        0: { cellWidth: 30 },
-        1: { cellWidth: 16 },
-        2: { cellWidth: 12 },
-        3: { cellWidth: 14 },
-        4: { cellWidth: 14 },
-        6: { cellWidth: 22 },
-      },
-      margin: { left: margin, right: margin },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.row.raw[6] === 'CONFLICT') {
-          data.cell.styles.textColor = [220, 38, 38];
-          data.cell.styles.fontStyle = 'bold';
+      // Insert lunch break row
+      if (lunchEnabled && lunchStart && lunchEnd) {
+        const lunchIdx = schedule.findIndex(s => s.time >= lunchStart);
+        const lunchRow = {
+          time: lunchStart, type: 'LUNCH', pitch: '',
+          detail: 'Lunch Break',
+          note: lunchStart + ' \u2013 ' + lunchEnd,
+          isRef: false, isConflict: false, isLunch: true,
+        };
+        if (lunchIdx === -1) {
+          schedule.push(lunchRow);
+        } else {
+          schedule.splice(lunchIdx, 0, lunchRow);
         }
-        if (data.section === 'body' && data.row.raw[2] === 'REF') {
-          data.cell.styles.fillColor = [254, 243, 199];
+      }
+
+      const tableHead = [['Time', 'Type', 'Location', 'Detail', 'Note']];
+      const tableBody = schedule.map(s => [s.time, s.type, s.pitch, s.detail, s.note]);
+
+      doc.autoTable({
+        startY: margin + 18,
+        head: tableHead,
+        body: tableBody,
+        theme: 'grid',
+        styles: { fontSize: 8.5, cellPadding: 2.5 },
+        headStyles: { fillColor: [124, 18, 41], fontSize: 8.5, cellPadding: 2.5, halign: 'center', textColor: [255, 255, 255] },
+        columnStyles: {
+          0: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+          1: { cellWidth: 22, halign: 'center' },
+          2: { cellWidth: 20, halign: 'center' },
+          3: { cellWidth: 'auto' },
+          4: { cellWidth: 30 },
+        },
+        margin: { left: margin, right: margin },
+        didParseCell: (data) => {
+          if (data.section === 'body') {
+            const row = data.row.raw;
+            if (row[1] === 'REF DUTY') {
+              data.cell.styles.fillColor = [219, 234, 254];
+            }
+            if (row[1] === 'LUNCH') {
+              data.cell.styles.fillColor = [254, 243, 199];
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.textColor = [146, 64, 14];
+            }
+            if (row[4] === 'CONFLICT') {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            if (typeof row[4] === 'string' && row[4].startsWith('AWAY')) {
+              data.cell.styles.textColor = [180, 83, 9];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        },
+      });
+
+      // Site plan image
+      if (sitePlanData) {
+        const tableBottomY = doc.lastAutoTable.finalY + 5;
+        const availableH = pageH - margin - tableBottomY;
+        const availableW = usableW;
+        if (availableH > 40) {
+          const imgProps = doc.getImageProperties(sitePlanData);
+          const aspect = imgProps.width / imgProps.height;
+          let imgW = availableW;
+          let imgH = imgW / aspect;
+          if (imgH > availableH) {
+            imgH = availableH;
+            imgW = imgH * aspect;
+          }
+          const imgX = margin + (usableW - imgW) / 2;
+          doc.addImage(sitePlanData, 'PNG', imgX, tableBottomY, imgW, imgH, undefined, 'FAST');
         }
-      },
-    });
+      }
+    }
 
     const safeName = clubName.replace(/[^a-zA-Z0-9]/g, '_');
     doc.save(safeName + '_Festival_Pack.pdf');
