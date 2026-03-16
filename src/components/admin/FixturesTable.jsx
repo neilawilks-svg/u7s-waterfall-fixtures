@@ -1,6 +1,6 @@
 import React from 'react';
 import { Download, RefreshCw } from '../icons';
-import { downloadFixturesAsExcel, downloadClubPackPDF, downloadClubPack, printFixtures } from '../../utils/exports';
+import { downloadFixturesAsExcel, downloadClubPackPDF, printFixtures } from '../../utils/exports';
 
 export default function FixturesTable({
   fixtures, teams, zones,
@@ -9,6 +9,7 @@ export default function FixturesTable({
   fixtureSwapMode, setFixtureSwapMode,
   swapFixturesBetweenRounds,
   setError,
+  lunchEnabled, lunchStart, lunchEnd,
 }) {
   if (fixtures.length === 0) return null;
 
@@ -30,15 +31,15 @@ export default function FixturesTable({
               <Download size={18} />
               Club Pack
             </button>
-            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-64 max-h-60 overflow-y-auto">
+            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-60 overflow-y-auto">
               {clubs.map(club => (
-                <div key={club} className="flex items-center justify-between px-4 py-2 border-b border-gray-100 hover:bg-gray-50">
-                  <span className="text-sm text-gray-900 font-medium truncate mr-2">{club}</span>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => downloadClubPackPDF(club, fixtures, teams, setError)} className="px-2 py-1 bg-red-700 text-white rounded text-xs font-medium hover:bg-red-800">PDF</button>
-                    <button onClick={() => downloadClubPack(club, fixtures, teams, setError)} className="px-2 py-1 bg-green-700 text-white rounded text-xs font-medium hover:bg-green-800">Excel</button>
-                  </div>
-                </div>
+                <button
+                  key={club}
+                  onClick={() => downloadClubPackPDF(club, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd)}
+                  className="w-full text-left px-4 py-2 border-b border-gray-100 hover:bg-gray-50 text-sm text-gray-900 font-medium"
+                >
+                  {club}
+                </button>
               ))}
             </div>
           </div>

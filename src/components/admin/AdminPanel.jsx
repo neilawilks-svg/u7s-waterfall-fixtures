@@ -72,6 +72,9 @@ export default function AdminPanel(props) {
           setFixtureSwapMode={props.setFixtureSwapMode}
           swapFixturesBetweenRounds={props.swapFixturesBetweenRounds}
           setError={props.setError}
+          lunchEnabled={props.lunchEnabled}
+          lunchStart={props.lunchStart}
+          lunchEnd={props.lunchEnd}
         />
       </div>
     </div>
