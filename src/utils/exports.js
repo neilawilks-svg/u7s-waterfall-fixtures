@@ -7,10 +7,12 @@ let _sitePlanCache = null;
 const _sitePlanPromise = fetch('/site-plan.png')
   .then(r => r.blob())
   .then(blob => new Promise(resolve => {
+    // Force image/png MIME type so jsPDF recognises the format correctly
+    const pngBlob = new Blob([blob], { type: 'image/png' });
     const reader = new FileReader();
     reader.onload = e => { _sitePlanCache = e.target.result; resolve(e.target.result); };
     reader.onerror = () => resolve(null);
-    reader.readAsDataURL(blob);
+    reader.readAsDataURL(pngBlob);
   }))
   .catch(() => null);
 
