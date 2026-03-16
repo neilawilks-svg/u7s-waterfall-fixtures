@@ -1,6 +1,6 @@
 import React from 'react';
 import { Download, RefreshCw } from '../icons';
-import { downloadFixturesAsExcel, downloadClubPackPDF, printFixtures } from '../../utils/exports';
+import { downloadFixturesAsExcel, downloadClubPackPDF, downloadAllClubPacksPDF, printFixtures } from '../../utils/exports';
 
 export default function FixturesTable({
   fixtures, teams, zones,
@@ -31,7 +31,14 @@ export default function FixturesTable({
               <Download size={18} />
               Club Pack
             </button>
-            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-60 overflow-y-auto">
+            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-72 overflow-y-auto">
+              <button
+                onClick={() => downloadAllClubPacksPDF(fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd)}
+                className="w-full flex items-center gap-2 px-4 py-2 border-b-2 border-gray-300 hover:bg-green-50 text-sm text-green-800 font-semibold"
+              >
+                <Download size={14} className="flex-shrink-0" />
+                Download All Clubs
+              </button>
               {clubs.map(club => (
                 <button
                   key={club}
