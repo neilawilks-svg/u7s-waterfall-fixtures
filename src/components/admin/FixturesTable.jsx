@@ -36,8 +36,9 @@ export default function FixturesTable({
                 <button
                   key={club}
                   onClick={() => downloadClubPackPDF(club, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd)}
-                  className="w-full text-left px-4 py-2 border-b border-gray-100 hover:bg-gray-50 text-sm text-gray-900 font-medium"
+                  className="w-full flex items-center gap-2 px-4 py-2 border-b border-gray-100 hover:bg-gray-50 text-sm text-gray-900 font-medium"
                 >
+                  <Download size={14} className="text-gray-500 flex-shrink-0" />
                   {club}
                 </button>
               ))}

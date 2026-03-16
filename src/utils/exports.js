@@ -1,6 +1,19 @@
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
+// Pre-fetch site plan at module load so the PDF download stays synchronous
+// (browsers can block downloads triggered after async awaits)
+let _sitePlanCache = null;
+const _sitePlanPromise = fetch('/site-plan.png')
+  .then(r => r.blob())
+  .then(blob => new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => { _sitePlanCache = e.target.result; resolve(e.target.result); };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  }))
+  .catch(() => null);
+
 export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) => {
   try {
     const XLSX = await import('xlsx');
@@ -140,19 +153,8 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
 
 export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd) => {
   try {
-    // Load site plan image
-    let sitePlanData = null;
-    try {
-      const response = await fetch('/site-plan.png');
-      const blob = await response.blob();
-      sitePlanData = await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
-    } catch (e) {
-      // Site plan not available, continue without it
-    }
+    // Use pre-cached site plan (loaded at module init); await only if not yet ready
+    const sitePlanData = _sitePlanCache !== null ? _sitePlanCache : await _sitePlanPromise;
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();   // 210
