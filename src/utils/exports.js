@@ -1,28 +1,33 @@
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-// Pre-load site plan at module init. Uses fetch + manual base64 so we don't
-// depend on canvas (which can fail silently). Reads PNG width/height from the
-// IHDR header bytes (16-23) to keep the correct aspect ratio.
+// Pre-load site plan at module init. fetch → ArrayBuffer → FileReader gives
+// a guaranteed data:image/png;base64,... URL without call-stack limits.
+// Dimensions are read directly from the PNG IHDR binary header (bytes 16-23).
 let _sitePlanCache = null;
-const _sitePlanPromise = fetch('/site-plan.png')
-  .then(async r => {
+const _sitePlanPromise = (async () => {
+  try {
+    const r = await fetch('/site-plan.png');
     if (!r.ok) return null;
     const buf = await r.arrayBuffer();
     const bytes = new Uint8Array(buf);
-    // Build base64 in 4 KB chunks to avoid call-stack overflow
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 4096) {
-      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 4096, bytes.length)));
-    }
-    const base64 = btoa(binary);
-    // PNG IHDR: width at bytes 16-19, height at bytes 20-23
+    // PNG IHDR: width = bytes 16-19, height = bytes 20-23
     const w = ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0;
     const h = ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) >>> 0;
-    _sitePlanCache = { dataUrl: 'data:image/png;base64,' + base64, width: w || 800, height: h || 600 };
+    // FileReader encodes large binary data reliably without spread/btoa limits
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('FileReader failed'));
+      reader.readAsDataURL(new Blob([buf], { type: 'image/png' }));
+    });
+    _sitePlanCache = { dataUrl, width: w || 800, height: h || 600 };
     return _sitePlanCache;
-  })
-  .catch(() => null);
+  } catch (e) {
+    console.warn('Site plan could not be loaded:', e.message);
+    return null;
+  }
+})();
 
 export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) => {
   try {
