@@ -7,7 +7,7 @@ import 'jspdf-autotable';
 let _sitePlanCache = null;
 const _sitePlanPromise = (async () => {
   try {
-    const r = await fetch('/site-plan.png');
+    const r = await fetch(import.meta.env.BASE_URL + 'site-plan.png');
     if (!r.ok) return null;
     const buf = await r.arrayBuffer();
     const bytes = new Uint8Array(buf);
