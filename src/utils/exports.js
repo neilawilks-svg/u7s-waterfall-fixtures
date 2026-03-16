@@ -1,24 +1,28 @@
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-// Pre-load site plan via canvas so jsPDF always receives a valid PNG data URL.
-// Using <img> + canvas handles any source format and avoids MIME-type detection issues.
-let _sitePlanCache = null; // { dataUrl, width, height }
-const _sitePlanPromise = new Promise(resolve => {
-  const img = new Image();
-  img.onload = () => {
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      _sitePlanCache = { dataUrl: canvas.toDataURL('image/png'), width: img.naturalWidth, height: img.naturalHeight };
-      resolve(_sitePlanCache);
-    } catch (e) { resolve(null); }
-  };
-  img.onerror = () => resolve(null);
-  img.src = '/site-plan.png';
-});
+// Pre-load site plan at module init. Uses fetch + manual base64 so we don't
+// depend on canvas (which can fail silently). Reads PNG width/height from the
+// IHDR header bytes (16-23) to keep the correct aspect ratio.
+let _sitePlanCache = null;
+const _sitePlanPromise = fetch('/site-plan.png')
+  .then(async r => {
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    // Build base64 in 4 KB chunks to avoid call-stack overflow
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 4096) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 4096, bytes.length)));
+    }
+    const base64 = btoa(binary);
+    // PNG IHDR: width at bytes 16-19, height at bytes 20-23
+    const w = ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0;
+    const h = ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) >>> 0;
+    _sitePlanCache = { dataUrl: 'data:image/png;base64,' + base64, width: w || 800, height: h || 600 };
+    return _sitePlanCache;
+  })
+  .catch(() => null);
 
 export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) => {
   try {
@@ -234,7 +238,7 @@ export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, l
         schedule.push({
           time: f.time, type: 'REF DUTY', pitch: 'Pitch ' + f.pitch,
           detail: f.team1.name + ' vs ' + f.team2.name,
-          note: f.refereeConflict ? 'CONFLICT' : '',
+          note: f.refereeConflict ? 'CONFLICT' : (f.zone ? 'Zone ' + f.zone : ''),
           isRef: true, isConflict: f.refereeConflict, isLunch: false,
         });
       });
