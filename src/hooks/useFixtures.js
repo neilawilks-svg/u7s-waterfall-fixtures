@@ -25,8 +25,8 @@ export function useFixtures() {
   const [numPitches, setNumPitches] = useState(16);
   const [matchDuration, setMatchDuration] = useState(15);
   const [startTime, setStartTime] = useState('10:30');
-  const [endTime, setEndTime] = useState('14:00');
-  const [numRounds, setNumRounds] = useState(7);
+  const [endTime, setEndTime] = useState('14:15');
+  const [numRounds, setNumRounds] = useState(6);
   const [minMatches, setMinMatches] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,13 +34,14 @@ export function useFixtures() {
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [uploadMethod, setUploadMethod] = useState('url');
   const [lunchEnabled, setLunchEnabled] = useState(true);
-  const [lunchStart, setLunchStart] = useState('11:45');
+  const [lunchStart, setLunchStart] = useState('12:00');
   const [lunchEnd, setLunchEnd] = useState('12:30');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [refreshTick, setRefreshTick] = useState(0);
   const [fixtureHistory, setFixtureHistory] = useState([]);
   const [swapMode, setSwapMode] = useState(null);
+  const [fixtureSwapMode, setFixtureSwapMode] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notifiedFixtures, setNotifiedFixtures] = useState(new Set());
@@ -153,6 +154,32 @@ export function useFixtures() {
     await saveFixtures(updated, teams, zones);
     setSwapMode(null);
     setError(`Swapped ${srcTeam.name} with ${destTeam.name}`);
+  };
+
+  const swapFixturesBetweenRounds = async (destFixtureId) => {
+    if (!fixtureSwapMode) return;
+    const srcFixture = fixtures.find(f => f.id === fixtureSwapMode.fixtureId);
+    const destFixture = fixtures.find(f => f.id === destFixtureId);
+    if (!srcFixture || !destFixture || srcFixture.id === destFixture.id) return;
+
+    const updated = fixtures.map(f => {
+      if (f.id === srcFixture.id) {
+        return { ...f, round: destFixture.round, time: destFixture.time,
+                 pitch: destFixture.pitch, zone: destFixture.zone,
+                 isCrossZone: destFixture.isCrossZone };
+      }
+      if (f.id === destFixture.id) {
+        return { ...f, round: srcFixture.round, time: srcFixture.time,
+                 pitch: srcFixture.pitch, zone: srcFixture.zone,
+                 isCrossZone: srcFixture.isCrossZone };
+      }
+      return f;
+    });
+
+    setFixtures(updated);
+    await saveFixtures(updated, teams, zones);
+    setFixtureSwapMode(null);
+    setError(`Swapped round position: ${srcFixture.team1.name} vs ${srcFixture.team2.name} (Round ${srcFixture.round} → Round ${destFixture.round})`);
   };
 
   const regenerateRound = async (roundNum) => {
@@ -511,6 +538,7 @@ export function useFixtures() {
     passwordInput, setPasswordInput,
     fixtureHistory, setFixtureHistory,
     swapMode, setSwapMode,
+    fixtureSwapMode, setFixtureSwapMode, swapFixturesBetweenRounds,
     pdfLoading, setPdfLoading,
     notificationsEnabled, setNotificationsEnabled,
     filteredTeams,

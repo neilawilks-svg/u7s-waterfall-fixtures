@@ -6,6 +6,8 @@ export default function FixturesTable({
   fixtures, teams, zones,
   loading, swapMode, setSwapMode,
   swapTeamsInFixture, regenerateRound,
+  fixtureSwapMode, setFixtureSwapMode,
+  swapFixturesBetweenRounds,
   setError,
 }) {
   if (fixtures.length === 0) return null;
@@ -61,6 +63,16 @@ export default function FixturesTable({
           <button onClick={() => setSwapMode(null)} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">Cancel</button>
         </div>
       )}
+      {fixtureSwapMode && (
+        <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-center justify-between">
+          <span className="text-purple-800 text-sm font-medium">
+            Fixture swap: click any other fixture to swap its round position with{' '}
+            <strong>{fixtureSwapMode.team1Name} vs {fixtureSwapMode.team2Name}</strong>{' '}
+            (currently Round {fixtureSwapMode.round})
+          </span>
+          <button onClick={() => setFixtureSwapMode(null)} className="px-3 py-1 bg-purple-600 text-white rounded text-sm">Cancel</button>
+        </div>
+      )}
 
       {rounds.map(round => {
         const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
@@ -91,7 +103,11 @@ export default function FixturesTable({
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {roundFixtures.map(f => (
-                    <tr key={f.id} className={`hover:bg-gray-50 ${f.refereeConflict ? 'bg-red-50' : ''} ${swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? 'bg-blue-50/50' : ''}`}>
+                    <tr
+                      key={f.id}
+                      className={`hover:bg-gray-50 ${f.refereeConflict ? 'bg-red-50' : ''} ${swapMode && swapMode.fixtureId !== f.id && swapMode.round === round ? 'bg-blue-50/50' : ''} ${fixtureSwapMode && fixtureSwapMode.fixtureId !== f.id ? 'bg-purple-50/40 cursor-pointer' : ''}`}
+                      onClick={fixtureSwapMode && fixtureSwapMode.fixtureId !== f.id ? () => swapFixturesBetweenRounds(f.id) : undefined}
+                    >
                       <td className="px-4 py-2 text-sm font-medium">Pitch {f.pitch}</td>
                       <td className="px-4 py-2 text-sm">
                         {f.zone && <span className={f.isCrossZone ? 'text-amber-600 font-medium' : 'font-medium'}>Zone {f.zone}{f.isCrossZone ? ' *' : ''}</span>}
@@ -115,18 +131,26 @@ export default function FixturesTable({
                           <span className="text-red-500 font-medium">NONE</span>
                         )}
                       </td>
-                      <td className="px-4 py-2 text-sm">
+                      <td className="px-4 py-2 text-sm" onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1">
                           <button
                             onClick={() => setSwapMode({ fixtureId: f.id, slot: 1, teamName: f.team1.name, round })}
-                            className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                            className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 disabled:opacity-40"
                             title={`Swap ${f.team1.name}`}
+                            disabled={!!fixtureSwapMode}
                           >1</button>
                           <button
                             onClick={() => setSwapMode({ fixtureId: f.id, slot: 2, teamName: f.team2.name, round })}
-                            className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                            className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 disabled:opacity-40"
                             title={`Swap ${f.team2.name}`}
+                            disabled={!!fixtureSwapMode}
                           >2</button>
+                          <button
+                            onClick={() => setFixtureSwapMode({ fixtureId: f.id, team1Name: f.team1.name, team2Name: f.team2.name, round })}
+                            className="px-1.5 py-0.5 bg-purple-200 text-purple-800 rounded text-xs hover:bg-purple-300 disabled:opacity-40"
+                            title="Swap this fixture's round position with another fixture"
+                            disabled={!!swapMode}
+                          >↕</button>
                         </div>
                       </td>
                     </tr>

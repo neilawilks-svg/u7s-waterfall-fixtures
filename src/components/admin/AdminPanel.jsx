@@ -68,6 +68,9 @@ export default function AdminPanel(props) {
           setSwapMode={props.setSwapMode}
           swapTeamsInFixture={props.swapTeamsInFixture}
           regenerateRound={props.regenerateRound}
+          fixtureSwapMode={props.fixtureSwapMode}
+          setFixtureSwapMode={props.setFixtureSwapMode}
+          swapFixturesBetweenRounds={props.swapFixturesBetweenRounds}
           setError={props.setError}
         />
       </div>
