@@ -25,8 +25,8 @@ export function useFixtures() {
   const [numPitches, setNumPitches] = useState(16);
   const [matchDuration, setMatchDuration] = useState(15);
   const [startTime, setStartTime] = useState('10:30');
-  const [endTime, setEndTime] = useState('14:00');
-  const [numRounds, setNumRounds] = useState(7);
+  const [endTime, setEndTime] = useState('14:15');
+  const [numRounds, setNumRounds] = useState(6);
   const [minMatches, setMinMatches] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +34,7 @@ export function useFixtures() {
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [uploadMethod, setUploadMethod] = useState('url');
   const [lunchEnabled, setLunchEnabled] = useState(true);
-  const [lunchStart, setLunchStart] = useState('11:45');
+  const [lunchStart, setLunchStart] = useState('12:00');
   const [lunchEnd, setLunchEnd] = useState('12:30');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
