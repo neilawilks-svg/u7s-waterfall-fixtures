@@ -228,6 +228,66 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, m
     }
   }
 
+  // Pass B: Aggressive guarantee — pair under-minimum teams with ANY available partner
+  let passB = 0;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const underMin = teamList.filter(t => teamFixtureCounts[t.id] < effectiveMin);
+    if (underMin.length === 0) break;
+
+    for (const team of underMin) {
+      if (teamFixtureCounts[team.id] >= effectiveMin) continue;
+
+      for (const [roundNum, roundData] of sortedRounds) {
+        if (teamFixtureCounts[team.id] >= effectiveMin) break;
+        if (roundData.usedTeams.has(team.id)) continue;
+
+        const sparePitches = allPitches.filter(p => !roundData.filledPitches.has(p));
+        if (sparePitches.length === 0) continue;
+
+        const partners = teamList.filter(
+          t => t.id !== team.id && !roundData.usedTeams.has(t.id)
+              && t.club !== team.club
+        );
+        if (partners.length === 0) continue;
+
+        let match = null;
+        for (const p of partners) {
+          const key = [team.id, p.id].sort().join('-');
+          if (!playedMatchups.has(key)) {
+            match = { t1: team, t2: p, matchupKey: key };
+            break;
+          }
+        }
+
+        if (!match) {
+          const p = partners[0];
+          const key = [team.id, p.id].sort().join('-');
+          match = { t1: team, t2: p, matchupKey: key };
+          relaxedMatchCount++;
+        }
+
+        const pitch = sparePitches[0];
+        const zone = zoneList.find(z => z.pitches.includes(pitch)) || zoneList[0];
+        allFixtures.push({
+          id: `fixture-backfill2-${roundNum}-${pitch}`,
+          round: roundNum,
+          pitch,
+          time: roundData.time,
+          team1: match.t1,
+          team2: match.t2,
+          zone: zone.id,
+          isCrossZone: match.t1.zone !== match.t2.zone,
+        });
+        recordMatch(match.t1, match.t2, match.matchupKey, roundData.usedTeams, {}, roundNum - 1);
+        roundData.filledPitches.add(pitch);
+        passB++;
+        changed = true;
+      }
+    }
+  }
+
   // Assign referees to all fixtures
   assignReferees(allFixtures, zoneList);
 
@@ -256,6 +316,9 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, m
   }
   if (relaxedMatchCount > 0) {
     summary += ` Backfill used ${relaxedMatchCount} rematch(es) to meet minimum.`;
+  }
+  if (passB > 0) {
+    summary += ` Pass B added ${passB} match(es) to guarantee minimum.`;
   }
   if (teamsUnderMinimum.length > 0) {
     summary += ` WARNING: ${teamsUnderMinimum.length} team(s) could not reach the minimum of ${effectiveMin} matches even after backfill: ${teamsUnderMinimum.map(t => t.name).join(', ')}.`;
