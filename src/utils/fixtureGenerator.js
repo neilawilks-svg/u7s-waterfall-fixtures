@@ -289,6 +289,66 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, m
     }
   }
 
+  // Pass C: Create extra round(s) for teams still below minimum when all pitch slots are full
+  let passC = 0;
+  const stillUnderC = () => teamList.filter(t => teamFixtureCounts[t.id] < effectiveMin);
+  if (stillUnderC().length > 0) {
+    const maxRound = Math.max(...[...roundsMap.keys()]);
+    const lastTime = roundsMap.get(maxRound).time;
+    let extraRoundNum = maxRound + 1;
+    let extraTime = getNextAvailableTime(addMinutes(lastTime, matchDuration), lunchEnabled, lunchStart, lunchEnd);
+
+    let under = stillUnderC();
+    while (under.length > 0) {
+      const usedTeams = new Set();
+      const usedPitches = new Set();
+      let addedAny = false;
+
+      for (const team of under) {
+        if (usedTeams.has(team.id)) continue;
+
+        // Prefer under-minimum partners; fall back to any different-club team
+        const partners = teamList
+          .filter(t => t.id !== team.id && t.club !== team.club && !usedTeams.has(t.id))
+          .sort((a, b) => teamFixtureCounts[a.id] - teamFixtureCounts[b.id]);
+        if (partners.length === 0) continue;
+
+        const pitch = allPitches.find(p => !usedPitches.has(p));
+        if (!pitch) break;
+
+        const partner = partners[0];
+        const matchupKey = [team.id, partner.id].sort().join('-');
+        const zone = zoneList.find(z => z.pitches.includes(pitch)) || zoneList[0];
+
+        allFixtures.push({
+          id: `fixture-passc-${extraRoundNum}-${pitch}`,
+          round: extraRoundNum,
+          pitch,
+          time: extraTime,
+          team1: team,
+          team2: partner,
+          zone: zone.id,
+          isCrossZone: team.zone !== partner.zone,
+        });
+        usedTeams.add(team.id);
+        usedTeams.add(partner.id);
+        usedPitches.add(pitch);
+        teamFixtureCounts[team.id]++;
+        teamFixtureCounts[partner.id]++;
+        playedMatchups.add(matchupKey);
+        passC++;
+        addedAny = true;
+      }
+
+      if (!addedAny) break;
+      under = stillUnderC();
+      if (under.length > 0) {
+        extraRoundNum++;
+        extraTime = getNextAvailableTime(addMinutes(extraTime, matchDuration), lunchEnabled, lunchStart, lunchEnd);
+      }
+    }
+  }
+
   // Assign referees to all fixtures
   assignReferees(allFixtures, zoneList);
 
@@ -307,7 +367,9 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, m
   const conflictCount = allFixtures.filter(f => f.refereeConflict).length;
   const unassignedCount = allFixtures.filter(f => !f.referee).length;
 
-  let summary = `Generated ${allFixtures.length} fixtures across ${totalRounds} rounds in ${zoneList.length} zones. `;
+  const displayRounds = new Set(allFixtures.map(f => f.round)).size;
+
+  let summary = `Generated ${allFixtures.length} fixtures across ${displayRounds} rounds in ${zoneList.length} zones. `;
   summary += `Teams have ${minFixtures}-${maxFixtures} matches (avg: ${avgFixtures}). `;
   summary += `${teamsWithTarget}/${teamList.length} teams have exactly ${numRounds} matches. `;
   summary += `${intraPercent}% intra-zone, ${100 - intraPercent}% cross-zone. `;
@@ -320,6 +382,9 @@ export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, m
   }
   if (passB > 0) {
     summary += ` Pass B added ${passB} match(es) to guarantee minimum.`;
+  }
+  if (passC > 0) {
+    summary += ` Pass C added ${passC} match(es) in an extra round to guarantee minimum.`;
   }
   if (teamsUnderMinimum.length > 0) {
     summary += ` WARNING: ${teamsUnderMinimum.length} team(s) could not reach the minimum of ${effectiveMin} matches even after backfill: ${teamsUnderMinimum.map(t => t.name).join(', ')}.`;
