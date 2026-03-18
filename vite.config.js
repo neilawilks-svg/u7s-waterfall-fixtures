@@ -12,6 +12,7 @@ export default defineConfig({
   base: '/u7s-waterfall-fixtures/',
   define: {
     __GIT_HASH__: JSON.stringify(gitHash),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   build: {
     outDir: 'dist',

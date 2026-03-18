@@ -15,15 +15,20 @@ export default function AdminPanel(props) {
               <h1 className="text-3xl font-bold text-gray-900">U7's Waterfall</h1>
               <p className="text-gray-600 mt-1">Generate and manage fixtures</p>
             </div>
-            <a
-              href={`https://github.com/neilawilks-svg/u7s-waterfall-fixtures/commit/${__GIT_HASH__}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded hover:bg-gray-200"
-              title="Deployed commit — click to view on GitHub"
-            >
-              {__GIT_HASH__}
-            </a>
+            <div className="flex flex-col items-end gap-1">
+              <a
+                href={`https://github.com/neilawilks-svg/u7s-waterfall-fixtures/commit/${__GIT_HASH__}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-mono bg-gray-100 text-gray-500 px-2 py-1 rounded hover:bg-gray-200"
+                title="Deployed commit — click to view on GitHub"
+              >
+                {__GIT_HASH__}
+              </a>
+              <span className="text-xs text-gray-400">
+                {new Date(__BUILD_TIME__).toLocaleString()}
+              </span>
+            </div>
           </div>
           {props.error && (
             <div className={`mb-4 p-4 ${props.error.includes('Successfully') ? 'bg-[#7c1229]/5 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'} border rounded-lg`}>
