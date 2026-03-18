@@ -23,7 +23,8 @@ export const generateSampleTeams = () => {
 
 export const generateFixtureSet = ({ teams, numPitches, numRounds, minMatches, matchDuration, startTime, endTime, lunchEnabled, lunchStart, lunchEnd }) => {
   const effectiveMin = (minMatches != null && minMatches > 0) ? minMatches : numRounds;
-  const teamList = teams.length > 0 ? [...teams] : generateSampleTeams();
+  const teamList = (teams.length > 0 ? [...teams] : generateSampleTeams())
+    .sort(() => Math.random() - 0.5);
 
   // Phase 0: Zone setup
   const minTeamsPerZone = 3;
