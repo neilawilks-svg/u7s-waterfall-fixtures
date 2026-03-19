@@ -431,6 +431,25 @@ export function useFixtures() {
     setLoading(false);
   };
 
+  const handleImportFixtures = async (file) => {
+    setLoading(true);
+    setError('');
+    try {
+      const { importFixturesFromExcel } = await import('../utils/fixtureImporter');
+      const result = await importFixturesFromExcel(file);
+      setFixtures(result.fixtures);
+      setTeams(result.teams);
+      setZones(result.zones);
+      setHiddenRounds(new Set());
+      await saveFixtures(result.fixtures, result.teams, result.zones, false, new Set());
+      setError(result.summary);
+    } catch (err) {
+      setError('Error importing fixtures: ' + err.message);
+      console.error(err);
+    }
+    setLoading(false);
+  };
+
   const enableNotifications = async () => {
     if (!('Notification' in window)) {
       alert('Notifications are not supported in this browser');
@@ -578,6 +597,7 @@ export function useFixtures() {
     handleFileUpload,
     loadTeamsFromSheet,
     generateFixtures: handleGenerateFixtures,
+    importFixtures: handleImportFixtures,
     enableNotifications,
     getTeamFixtures,
     getCurrentAndNext,
