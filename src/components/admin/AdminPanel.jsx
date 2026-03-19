@@ -75,6 +75,9 @@ export default function AdminPanel(props) {
         />
         <FixturesTable
           fixtures={props.fixtures}
+          visibleFixtures={props.visibleFixtures}
+          hiddenRounds={props.hiddenRounds}
+          toggleHideRound={props.toggleHideRound}
           teams={props.teams}
           zones={props.zones}
           loading={props.loading}

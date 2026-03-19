@@ -43,6 +43,7 @@ export function useFixtures() {
   const [swapMode, setSwapMode] = useState(null);
   const [fixtureSwapMode, setFixtureSwapMode] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [hiddenRounds, setHiddenRounds] = useState(new Set());
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notifiedFixtures, setNotifiedFixtures] = useState(new Set());
 
@@ -73,6 +74,9 @@ export function useFixtures() {
             }));
             setZones(restoredZones);
           }
+          if (data.hiddenRounds) {
+            setHiddenRounds(new Set(data.hiddenRounds));
+          }
         }
       }
     } catch (err) {
@@ -80,7 +84,7 @@ export function useFixtures() {
     }
   };
 
-  const saveFixtures = async (fixtureData, teamData, zoneData, skipHistory = false) => {
+  const saveFixtures = async (fixtureData, teamData, zoneData, skipHistory = false, hiddenRoundsOverride = null) => {
     try {
       if (!skipHistory && fixtures.length > 0) {
         setFixtureHistory(prev => {
@@ -96,11 +100,13 @@ export function useFixtures() {
       }
 
       console.log('Attempting to save fixtures...', fixtureData.length);
+      const roundsToSave = hiddenRoundsOverride !== null ? hiddenRoundsOverride : hiddenRounds;
       const payload = {
         fixtures: fixtureData,
         teams: teamData,
         zones: zoneData ? zoneData.map(z => ({ id: z.id, pitches: z.pitches, teamIds: z.teams.map(t => t.id) })) : [],
-        generated: new Date().toISOString()
+        generated: new Date().toISOString(),
+        hiddenRounds: [...roundsToSave],
       };
       console.log('Payload:', payload);
 
@@ -114,6 +120,23 @@ export function useFixtures() {
       }
     } catch (err) {
       console.error('Error saving fixtures:', err);
+    }
+  };
+
+  const toggleHideRound = async (roundNum) => {
+    const next = new Set(hiddenRounds);
+    if (next.has(roundNum)) next.delete(roundNum);
+    else next.add(roundNum);
+    setHiddenRounds(next);
+    try {
+      const result = await storageGet('rugby-fixtures');
+      if (result && result.value) {
+        const data = JSON.parse(result.value);
+        data.hiddenRounds = [...next];
+        await storageSet('rugby-fixtures', JSON.stringify(data));
+      }
+    } catch (err) {
+      console.error('Error saving hidden rounds:', err);
     }
   };
 
@@ -395,7 +418,8 @@ export function useFixtures() {
         setFixtures(result.fixtures);
         setTeams(result.teams);
         setZones(result.zones);
-        await saveFixtures(result.fixtures, result.teams, result.zones);
+        setHiddenRounds(new Set());
+        await saveFixtures(result.fixtures, result.teams, result.zones, false, new Set());
         setError(result.summary);
         console.log(result.summary);
       }
@@ -487,8 +511,10 @@ export function useFixtures() {
     t.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const visibleFixtures = fixtures.filter(f => !hiddenRounds.has(f.round));
+
   const getTeamFixtures = (teamId) => {
-    return fixtures.filter(f =>
+    return visibleFixtures.filter(f =>
       f.team1.id === teamId || f.team2.id === teamId
     ).sort((a, b) => a.time.localeCompare(b.time));
   };
@@ -497,14 +523,14 @@ export function useFixtures() {
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    const current = fixtures.filter(f => f.time <= currentTime &&
+    const current = visibleFixtures.filter(f => f.time <= currentTime &&
       currentTime < addMinutes(f.time, matchDuration));
-    const upcoming = fixtures.filter(f => f.time > currentTime)
+    const upcoming = visibleFixtures.filter(f => f.time > currentTime)
       .sort((a, b) => a.time.localeCompare(b.time))
       .slice(0, numPitches);
 
-    if (current.length === 0 && upcoming.length === 0 && fixtures.length > 0) {
-      const allSorted = [...fixtures].sort((a, b) => a.time.localeCompare(b.time));
+    if (current.length === 0 && upcoming.length === 0 && visibleFixtures.length > 0) {
+      const allSorted = [...visibleFixtures].sort((a, b) => a.time.localeCompare(b.time));
       return { current: [], upcoming: [], allFixtures: allSorted, outsideSchedule: true };
     }
 
@@ -542,6 +568,8 @@ export function useFixtures() {
     pdfLoading, setPdfLoading,
     notificationsEnabled, setNotificationsEnabled,
     filteredTeams,
+    hiddenRounds, toggleHideRound,
+    visibleFixtures,
     loadFixtures,
     saveFixtures,
     restoreFromHistory,

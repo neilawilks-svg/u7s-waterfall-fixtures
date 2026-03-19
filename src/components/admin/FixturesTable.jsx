@@ -1,9 +1,11 @@
 import React from 'react';
-import { Download, RefreshCw } from '../icons';
+import { Download, RefreshCw, Eye, EyeOff } from '../icons';
 import { downloadFixturesAsExcel, downloadClubPackPDF, downloadAllClubPacksPDF, printFixtures } from '../../utils/exports';
 
 export default function FixturesTable({
   fixtures, teams, zones,
+  visibleFixtures,
+  hiddenRounds, toggleHideRound,
   loading, swapMode, setSwapMode,
   swapTeamsInFixture, regenerateRound,
   fixtureSwapMode, setFixtureSwapMode,
@@ -22,7 +24,7 @@ export default function FixturesTable({
         <h2 className="text-2xl font-bold text-gray-900">Generated Fixtures ({fixtures.length} matches)</h2>
         <div className="flex gap-2 flex-wrap">
           <div className="text-sm text-gray-600 self-center">{teams.length} teams</div>
-          <button onClick={() => downloadFixturesAsExcel(fixtures, teams, zones, setError)} className="flex items-center gap-2 px-4 py-2 bg-[#7c1229] text-white rounded-lg hover:bg-[#a01638]">
+          <button onClick={() => downloadFixturesAsExcel(visibleFixtures, teams, zones, setError)} className="flex items-center gap-2 px-4 py-2 bg-[#7c1229] text-white rounded-lg hover:bg-[#a01638]">
             <Download size={18} />
             Excel
           </button>
@@ -33,14 +35,14 @@ export default function FixturesTable({
             </button>
             <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-56 max-h-72 overflow-y-auto">
               <button
-                onClick={() => downloadAllClubPacksPDF(fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, true)}
+                onClick={() => downloadAllClubPacksPDF(visibleFixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, true)}
                 className="w-full flex items-center gap-2 px-4 py-2 border-b border-gray-200 hover:bg-green-50 text-sm text-green-800 font-semibold"
               >
                 <Download size={14} className="flex-shrink-0" />
                 Download All Clubs
               </button>
               <button
-                onClick={() => downloadAllClubPacksPDF(fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, false)}
+                onClick={() => downloadAllClubPacksPDF(visibleFixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, false)}
                 className="w-full flex items-center gap-2 px-4 py-2 border-b-2 border-gray-300 hover:bg-green-50 text-sm text-green-800 font-semibold"
               >
                 <Download size={14} className="flex-shrink-0" />
@@ -49,7 +51,7 @@ export default function FixturesTable({
               {clubs.map(club => (
                 <button
                   key={club}
-                  onClick={() => downloadClubPackPDF(club, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd)}
+                  onClick={() => downloadClubPackPDF(club, visibleFixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd)}
                   className="w-full flex items-center gap-2 px-4 py-2 border-b border-gray-100 hover:bg-gray-50 text-sm text-gray-900 font-medium"
                 >
                   <Download size={14} className="text-gray-500 flex-shrink-0" />
@@ -63,9 +65,9 @@ export default function FixturesTable({
               Print
             </button>
             <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden group-hover:block z-10 w-48">
-              <button onClick={() => printFixtures('byRound', fixtures, teams, zones)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-t-lg">By Round</button>
-              <button onClick={() => printFixtures('byPitch', fixtures, teams, zones)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50">By Pitch</button>
-              <button onClick={() => printFixtures('byTeam', fixtures, teams, zones)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-b-lg">By Team</button>
+              <button onClick={() => printFixtures('byRound', visibleFixtures, teams, zones)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-t-lg">By Round</button>
+              <button onClick={() => printFixtures('byPitch', visibleFixtures, teams, zones)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50">By Pitch</button>
+              <button onClick={() => printFixtures('byTeam', visibleFixtures, teams, zones)} className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 rounded-b-lg">By Team</button>
             </div>
           </div>
         </div>
@@ -92,18 +94,35 @@ export default function FixturesTable({
 
       {rounds.map(round => {
         const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
+        const isHidden = hiddenRounds.has(round);
         return (
-          <div key={round} className="mb-6">
+          <div key={round} className={`mb-6 ${isHidden ? 'opacity-50' : ''}`}>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-bold text-gray-800">Round {round} - {roundFixtures[0]?.time}</h3>
-              <button
-                onClick={() => regenerateRound(round)}
-                disabled={loading}
-                className="flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 disabled:bg-gray-400"
-              >
-                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                Re-generate
-              </button>
+              <div className="flex items-center gap-2">
+                <h3 className={`text-lg font-bold ${isHidden ? 'text-gray-400' : 'text-gray-800'}`}>
+                  Round {round} - {roundFixtures[0]?.time}
+                </h3>
+                {isHidden && (
+                  <span className="px-2 py-0.5 bg-gray-400 text-white rounded text-xs font-medium">Hidden</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => toggleHideRound(round)}
+                  title={isHidden ? 'Show in public view & exports' : 'Hide from public view & exports'}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-sm ${isHidden ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <button
+                  onClick={() => regenerateRound(round)}
+                  disabled={loading}
+                  className="flex items-center gap-1 px-3 py-1 bg-amber-500 text-white rounded-lg text-sm hover:bg-amber-600 disabled:bg-gray-400"
+                >
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                  Re-generate
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
