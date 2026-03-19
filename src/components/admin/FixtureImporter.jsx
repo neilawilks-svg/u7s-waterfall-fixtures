@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Download, RefreshCw } from '../icons';
+import { downloadImportTemplate } from '../../utils/fixtureImporter';
 
 export default function FixtureImporter({ importFixtures, loading }) {
   const inputRef = useRef(null);
@@ -26,6 +27,15 @@ export default function FixtureImporter({ importFixtures, loading }) {
             Round, Time, Pitch, Zone, Team 1, Team 2, Club 1, Club 2, Cross-Zone, Referee, Referee Club, Ref Conflict.
           </p>
         </div>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap mb-3">
+        <button
+          onClick={downloadImportTemplate}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium border border-gray-300"
+        >
+          <Download size={16} />
+          Download Template
+        </button>
       </div>
       <div className="flex items-center gap-3 flex-wrap">
         <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 text-sm font-medium border border-gray-300">

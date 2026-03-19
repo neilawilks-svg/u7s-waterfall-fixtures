@@ -1,5 +1,43 @@
 import * as XLSX from 'xlsx';
 
+/** Download a blank import template with the correct headers and two example rows. */
+export function downloadImportTemplate() {
+  const headers = [
+    'Round', 'Time', 'Pitch', 'Zone',
+    'Team 1', 'Team 2', 'Club 1', 'Club 2',
+    'Cross-Zone', 'Referee', 'Referee Club', 'Ref Conflict',
+  ];
+
+  const examples = [
+    [1, '10:30', 1, 'A', 'Chester Kites', 'Macclesfield Starfighters', 'Chester', 'Macclesfield', '', 'Bowdon Bulldogs', 'Bowdon', ''],
+    [1, '10:30', 2, 'A', 'Wilmslow Bears', 'Old Bedians Dragons', 'Wilmslow', 'Old Bedians', '', 'Helsby Spartans', 'Helsby', ''],
+    [1, '10:30', 5, 'C', 'Bowdon Bobcats', 'Macclesfield Meteors', 'Bowdon', 'Macclesfield', 'Yes', 'Caldy Smashers', 'Caldy', ''],
+    [2, '10:45', 1, 'A', 'Helsby Spartans', 'Sandbach Gladiators', 'Helsby', 'Sandbach', '', 'Chester Kites', 'Chester', 'Yes'],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...examples]);
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 7 },  // Round
+    { wch: 7 },  // Time
+    { wch: 7 },  // Pitch
+    { wch: 6 },  // Zone
+    { wch: 28 }, // Team 1
+    { wch: 28 }, // Team 2
+    { wch: 18 }, // Club 1
+    { wch: 18 }, // Club 2
+    { wch: 11 }, // Cross-Zone
+    { wch: 28 }, // Referee
+    { wch: 18 }, // Referee Club
+    { wch: 12 }, // Ref Conflict
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Fixtures');
+  XLSX.writeFile(wb, 'Fixture_Import_Template.xlsx');
+}
+
 /**
  * Parse an Excel file in the standard import format and return fixture data
  * ready to be saved directly to storage.
