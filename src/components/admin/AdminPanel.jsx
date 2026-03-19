@@ -1,6 +1,7 @@
 import React from 'react';
 import TeamLoader from './TeamLoader';
 import GenerationParams from './GenerationParams';
+import FixtureImporter from './FixtureImporter';
 import PitchLayoutViz from './PitchLayoutViz';
 import FixtureHistory from './FixtureHistory';
 import FixturesTable from './FixturesTable';
@@ -68,6 +69,7 @@ export default function AdminPanel(props) {
             generateFixtures={props.generateFixtures}
           />
         </div>
+        <FixtureImporter importFixtures={props.importFixtures} loading={props.loading} />
         <PitchLayoutViz zones={props.zones} />
         <FixtureHistory
           fixtureHistory={props.fixtureHistory}
