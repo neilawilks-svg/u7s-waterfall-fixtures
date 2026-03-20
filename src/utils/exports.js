@@ -304,6 +304,8 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
         time: f.time, type: 'MATCH ' + (idx + 1), pitch: 'Pitch ' + f.pitch,
         detail: 'vs ' + opp.name + ' (' + opp.club + ')',
         note: isAway ? 'AWAY - Zone ' + f.zone : (f.zone ? 'Zone ' + f.zone : ''),
+        referee: f.referee ? f.referee.name : f.refereeUnavailable ? `${f.team1.club} or ${f.team2.club}` : '\u2014',
+        refereeUnavailable: !!f.refereeUnavailable,
         isRef: false, isLunch: false,
       });
     });
@@ -312,30 +314,32 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
         time: f.time, type: 'REF DUTY', pitch: 'Pitch ' + f.pitch,
         detail: f.team1.name + ' vs ' + f.team2.name,
         note: f.refereeConflict ? 'CONFLICT' : (f.zone ? 'Zone ' + f.zone : ''),
+        referee: '', refereeUnavailable: false,
         isRef: true, isConflict: f.refereeConflict, isLunch: false,
       });
     });
     schedule.sort((a, b) => a.time.localeCompare(b.time) || (a.isRef ? 1 : -1));
 
     if (lunchEnabled && lunchStart && lunchEnd) {
-      const lunchRow = { time: lunchStart, type: 'LUNCH', pitch: '', detail: 'Lunch Break', note: lunchStart + ' \u2013 ' + lunchEnd, isRef: false, isLunch: true };
+      const lunchRow = { time: lunchStart, type: 'LUNCH', pitch: '', detail: 'Lunch Break', note: lunchStart + ' \u2013 ' + lunchEnd, referee: '', refereeUnavailable: false, isRef: false, isLunch: true };
       const idx = schedule.findIndex(s => s.time >= lunchStart);
       idx === -1 ? schedule.push(lunchRow) : schedule.splice(idx, 0, lunchRow);
     }
 
     doc.autoTable({
       startY: margin + 18,
-      head: [['Time', 'Type', 'Location', 'Detail', 'Note']],
-      body: schedule.map(s => [s.time, s.type, s.pitch, s.detail, s.note]),
+      head: [['Time', 'Type', 'Location', 'Detail', 'Note', 'Referee']],
+      body: schedule.map(s => [s.time, s.type, s.pitch, s.detail, s.note, s.referee]),
       theme: 'grid',
       styles: { fontSize: 8.5, cellPadding: 2.5 },
       headStyles: { fillColor: [124, 18, 41], fontSize: 8.5, cellPadding: 2.5, halign: 'center', textColor: [255, 255, 255] },
       columnStyles: {
-        0: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
-        1: { cellWidth: 22, halign: 'center' },
-        2: { cellWidth: 20, halign: 'center' },
+        0: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
+        1: { cellWidth: 20, halign: 'center' },
+        2: { cellWidth: 18, halign: 'center' },
         3: { cellWidth: 'auto' },
-        4: { cellWidth: 30 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 28 },
       },
       margin: { left: margin, right: margin },
       didParseCell: (data) => {
@@ -345,6 +349,10 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
           if (row[1] === 'LUNCH') { data.cell.styles.fillColor = [254, 243, 199]; data.cell.styles.fontStyle = 'bold'; data.cell.styles.textColor = [146, 64, 14]; }
           if (row[4] === 'CONFLICT') { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fontStyle = 'bold'; }
           if (typeof row[4] === 'string' && row[4].startsWith('AWAY')) { data.cell.styles.textColor = [180, 83, 9]; data.cell.styles.fontStyle = 'bold'; }
+          if (data.column.index === 5 && schedule[data.row.index]?.refereeUnavailable) {
+            data.cell.styles.textColor = [180, 120, 0];
+            data.cell.styles.fontStyle = 'italic';
+          }
         }
       },
     });
@@ -431,6 +439,8 @@ export const downloadTeamFixturePDF = async (team, fixtures, setPdfLoading) => {
         time: f.time, type: 'MATCH ' + (idx + 1), pitch: 'Pitch ' + f.pitch,
         detail: 'vs ' + opp.name + ' (' + opp.club + ')',
         note: isAway ? 'AWAY - Zone ' + f.zone : (f.zone ? 'Zone ' + f.zone : ''),
+        referee: f.referee ? f.referee.name : f.refereeUnavailable ? `${f.team1.club} or ${f.team2.club}` : '\u2014',
+        refereeUnavailable: !!f.refereeUnavailable,
         isRef: false, isConflict: false
       });
     });
@@ -439,13 +449,14 @@ export const downloadTeamFixturePDF = async (team, fixtures, setPdfLoading) => {
         time: f.time, type: 'REF DUTY', pitch: 'Pitch ' + f.pitch,
         detail: f.team1.name + ' vs ' + f.team2.name,
         note: f.refereeConflict ? 'CONFLICT' : '',
+        referee: '', refereeUnavailable: false,
         isRef: true, isConflict: f.refereeConflict
       });
     });
     schedule.sort((a, b) => a.time.localeCompare(b.time) || (a.isRef ? 1 : -1));
 
-    const tableHead = [['Time', 'Type', 'Location', 'Detail', 'Note']];
-    const tableBody = schedule.map(s => [s.time, s.type, s.pitch, s.detail, s.note]);
+    const tableHead = [['Time', 'Type', 'Location', 'Detail', 'Note', 'Referee']];
+    const tableBody = schedule.map(s => [s.time, s.type, s.pitch, s.detail, s.note, s.referee]);
 
     doc.autoTable({
       startY: margin + 18,
@@ -453,13 +464,14 @@ export const downloadTeamFixturePDF = async (team, fixtures, setPdfLoading) => {
       body: tableBody,
       theme: 'grid',
       styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [124, 18, 41], fontSize: 9, cellPadding: 3, halign: 'center' },
+      headStyles: { fillColor: [124, 18, 41], fontSize: 9, cellPadding: 3, halign: 'center', textColor: [255, 255, 255] },
       columnStyles: {
-        0: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
-        1: { cellWidth: 24, halign: 'center' },
-        2: { cellWidth: 22, halign: 'center' },
+        0: { cellWidth: 16, halign: 'center', fontStyle: 'bold' },
+        1: { cellWidth: 22, halign: 'center' },
+        2: { cellWidth: 20, halign: 'center' },
         3: { cellWidth: 'auto' },
-        4: { cellWidth: 30 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 28 },
       },
       margin: { left: margin, right: margin },
       didParseCell: (data) => {
@@ -475,6 +487,10 @@ export const downloadTeamFixturePDF = async (team, fixtures, setPdfLoading) => {
           if (typeof row[4] === 'string' && row[4].startsWith('AWAY')) {
             data.cell.styles.textColor = [180, 83, 9];
             data.cell.styles.fontStyle = 'bold';
+          }
+          if (data.column.index === 5 && schedule[data.row.index]?.refereeUnavailable) {
+            data.cell.styles.textColor = [180, 120, 0];
+            data.cell.styles.fontStyle = 'italic';
           }
         }
       },
