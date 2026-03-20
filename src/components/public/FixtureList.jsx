@@ -23,11 +23,13 @@ function FixtureCard({ f, variant }) {
         <div className={`text-gray-500 ${variant === 'current' ? 'text-sm my-1' : 'my-1'}`}>vs</div>
         <div className={variant === 'current' ? 'font-medium' : ''}>{f.team2.name}</div>
       </div>
-      {f.referee && (
+      {f.referee ? (
         <div className={`${refSize} ${f.refereeConflict ? 'text-red-600 font-medium' : variant === 'current' ? 'text-gray-500' : 'text-gray-400'}`}>
           Ref: {f.referee.name}{f.refereeConflict ? ' (conflict)' : ''}
         </div>
-      )}
+      ) : f.refereeUnavailable ? (
+        <div className={`${refSize} text-amber-600`}>No Referee Available</div>
+      ) : null}
     </div>
   );
 }

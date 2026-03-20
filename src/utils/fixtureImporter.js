@@ -87,6 +87,10 @@ export function importFixturesFromExcel(file) {
 
           if (!team1Name || !team2Name) continue;
 
+          // Keywords that indicate a referee is explicitly unavailable (not just unassigned)
+          const UNAVAILABLE = new Set(['unavailable', 'n/a', 'none', 'no referee', 'unavail']);
+          const refUnavailable = UNAVAILABLE.has(refName.toLowerCase());
+
           // Ensure team objects exist
           if (!teamMap.has(team1Name)) {
             teamMap.set(team1Name, { id: slugify(team1Name), name: team1Name, club: club1, zone: null });
@@ -111,7 +115,7 @@ export function importFixturesFromExcel(file) {
           const team2 = teamMap.get(team2Name);
 
           let referee = null;
-          if (refName) {
+          if (refName && !refUnavailable) {
             // Referee is a team — ensure they have a team entry too
             if (!teamMap.has(refName)) {
               teamMap.set(refName, { id: slugify(refName), name: refName, club: refClub, zone: null });
@@ -133,6 +137,7 @@ export function importFixturesFromExcel(file) {
             team2,
             referee,
             refereeConflict,
+            refereeUnavailable: refUnavailable,
           });
         }
 

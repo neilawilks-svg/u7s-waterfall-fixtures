@@ -75,9 +75,11 @@ export default function TeamDetail({ selectedTeam, teamFixtures, fixtures, zones
                 <div className="text-gray-700">
                   <span className="font-medium">{item.team1.name}</span> <span className="text-gray-500">vs</span> <span className="font-medium">{item.team2.name}</span>
                 </div>
-                {item.referee && (
+                {item.referee ? (
                   <div className="text-xs text-gray-500 mt-1">Referee: {item.referee.name}</div>
-                )}
+                ) : item.refereeUnavailable ? (
+                  <div className="text-xs text-amber-600 mt-1">No Referee Available</div>
+                ) : null}
               </div>
             );
           } else {
