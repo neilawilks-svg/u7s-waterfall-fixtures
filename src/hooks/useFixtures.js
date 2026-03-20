@@ -47,13 +47,23 @@ export function useFixtures() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notifiedFixtures, setNotifiedFixtures] = useState(new Set());
 
+  const UNAVAILABLE_NAMES = new Set(['unavailable', 'n/a', 'none', 'no referee', 'unavail']);
+
   const loadFixtures = async () => {
     try {
       const result = await storageGet('rugby-fixtures');
       if (result && result.value) {
         const data = JSON.parse(result.value);
         if (data.fixtures && data.fixtures.length > 0) {
-          setFixtures(data.fixtures || []);
+          // Normalize legacy fixtures where referee was stored as { name: 'Unavailable' }
+          // instead of referee: null + refereeUnavailable: true
+          const normalized = data.fixtures.map(f => {
+            if (f.referee && UNAVAILABLE_NAMES.has(f.referee.name?.toLowerCase())) {
+              return { ...f, referee: null, refereeUnavailable: true };
+            }
+            return f;
+          });
+          setFixtures(normalized);
 
           const teamMap = new Map();
           data.fixtures.forEach(f => {
