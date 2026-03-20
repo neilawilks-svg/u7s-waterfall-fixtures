@@ -162,6 +162,8 @@ export default function FixturesTable({
                           <span className={f.refereeConflict ? 'text-red-600 font-medium' : 'text-green-700'}>
                             {f.referee.name}{f.refereeConflict ? ' !' : ''}
                           </span>
+                        ) : f.refereeUnavailable ? (
+                          <span className="text-amber-600 font-medium">No Referee Available</span>
                         ) : (
                           <span className="text-red-500 font-medium">NONE</span>
                         )}
