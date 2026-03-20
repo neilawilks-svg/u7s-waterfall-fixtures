@@ -29,6 +29,79 @@ const _sitePlanPromise = (async () => {
   }
 })();
 
+// Pre-load QR code image at module init, same pattern as site plan.
+let _qrCodeCache = null;
+const _qrCodePromise = (async () => {
+  try {
+    const r = await fetch(import.meta.env.BASE_URL + 'QR_View_Fixtures.jpeg');
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    // Parse JPEG dimensions from SOF marker
+    const bytes = new Uint8Array(buf);
+    let qrW = 200, qrH = 260; // sensible fallback matching known aspect
+    let i = 2;
+    while (i + 4 < bytes.length) {
+      if (bytes[i] !== 0xFF) break;
+      const marker = bytes[i + 1];
+      const segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+      if (marker >= 0xC0 && marker <= 0xC3 && marker !== 0xC4) {
+        qrH = (bytes[i + 5] << 8) | bytes[i + 6];
+        qrW = (bytes[i + 7] << 8) | bytes[i + 8];
+        break;
+      }
+      i += 2 + segLen;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('FileReader failed'));
+      reader.readAsDataURL(new Blob([buf], { type: 'image/jpeg' }));
+    });
+    _qrCodeCache = { dataUrl, width: qrW, height: qrH };
+    return _qrCodeCache;
+  } catch (e) {
+    console.warn('QR code could not be loaded:', e.message);
+    return null;
+  }
+})();
+
+/**
+ * Add the QR code to the current page of `doc`.
+ *
+ * If there is 25 mm or more below `contentEndY`, the QR is placed centred in
+ * that space, sized as large as possible (capped at 75 mm wide).
+ * If less space is available the QR falls back to a 20 mm wide thumbnail in
+ * the top-right corner of the page — which is always blank because all page
+ * titles are centre-aligned.
+ * The function is a no-op when qrData is null (image failed to load).
+ */
+function addQrCode(doc, contentEndY, qrData) {
+  if (!qrData) return;
+  const pageH = doc.internal.pageSize.getHeight();
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 10;
+  const usableW = pageW - 2 * margin;
+  const aspect = qrData.width / qrData.height; // ~0.767 for the 1024×1334 image
+
+  const gap = 5;
+  const availableH = pageH - margin - contentEndY - gap;
+
+  if (availableH >= 25) {
+    // Size to fill the available box, never exceeding 75 mm in either dimension
+    let imgW = Math.min(usableW, 75);
+    let imgH = imgW / aspect;
+    if (imgH > availableH - 4) { imgH = availableH - 4; imgW = imgH * aspect; }
+    const x = margin + (usableW - imgW) / 2;
+    const y = contentEndY + gap + (availableH - 4 - imgH) / 2;
+    doc.addImage(qrData.dataUrl, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
+  } else {
+    // Fallback: small thumbnail in the top-right corner
+    const imgW = 20;
+    const imgH = imgW / aspect;
+    doc.addImage(qrData.dataUrl, 'JPEG', pageW - margin - imgW, margin, imgW, imgH, undefined, 'FAST');
+  }
+}
+
 export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) => {
   try {
     const XLSX = await import('xlsx');
@@ -168,7 +241,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
 
 // Shared helper: writes one club's summary page + per-team pages into an existing doc.
 // Call with addPageFirst=false for the first club in a document, true for subsequent clubs.
-const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, addPageFirst, includeSitePlan = true) => {
+const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, addPageFirst, includeSitePlan = true, qrData = null) => {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 10;
@@ -205,6 +278,7 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
     headStyles: { fillColor: [124, 18, 41], fontSize: 10, cellPadding: 3, textColor: [255, 255, 255] },
     margin: { left: margin, right: margin },
   });
+  addQrCode(doc, doc.lastAutoTable.finalY + 2, qrData);
 
   // One page per team
   for (const team of clubTeams) {
@@ -275,8 +349,9 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
       },
     });
 
+    let postContentY = doc.lastAutoTable.finalY;
     if (sitePlanData && includeSitePlan) {
-      const tableBottomY = doc.lastAutoTable.finalY + 5;
+      const tableBottomY = postContentY + 5;
       const availableH = pageH - margin - tableBottomY;
       if (availableH > 40) {
         const aspect = sitePlanData.width / sitePlanData.height;
@@ -284,16 +359,21 @@ const writeClubPages = (doc, clubName, fixtures, teams, sitePlanData, lunchEnabl
         let imgH = imgW / aspect;
         if (imgH > availableH) { imgH = availableH; imgW = imgH * aspect; }
         doc.addImage(sitePlanData.dataUrl, 'PNG', margin + (usableW - imgW) / 2, tableBottomY, imgW, imgH, undefined, 'FAST');
+        postContentY = tableBottomY + imgH;
       }
     }
+    addQrCode(doc, postContentY, qrData);
   }
 };
 
 export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd) => {
   try {
-    const sitePlanData = _sitePlanCache ?? await _sitePlanPromise;
+    const [sitePlanData, qrData] = await Promise.all([
+      _sitePlanCache ?? _sitePlanPromise,
+      _qrCodeCache   ?? _qrCodePromise,
+    ]);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    writeClubPages(doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, false);
+    writeClubPages(doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, false, true, qrData);
     doc.save(clubName.replace(/[^a-zA-Z0-9]/g, '_') + '_Festival_Pack.pdf');
   } catch (err) {
     setError('Error generating club pack PDF: ' + err.message);
@@ -303,11 +383,14 @@ export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, l
 
 export const downloadAllClubPacksPDF = async (fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, includeSitePlan = true) => {
   try {
-    const sitePlanData = includeSitePlan ? (_sitePlanCache ?? await _sitePlanPromise) : null;
+    const [sitePlanData, qrData] = await Promise.all([
+      includeSitePlan ? (_sitePlanCache ?? _sitePlanPromise) : Promise.resolve(null),
+      _qrCodeCache ?? _qrCodePromise,
+    ]);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const clubs = [...new Set(teams.map(t => t.club))].sort();
     clubs.forEach((club, i) => {
-      writeClubPages(doc, club, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, i > 0, includeSitePlan);
+      writeClubPages(doc, club, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, i > 0, includeSitePlan, qrData);
     });
     doc.save(includeSitePlan ? 'All_Clubs_Festival_Pack.pdf' : 'All_Clubs_Festival_Pack_No_Site_Plan.pdf');
   } catch (err) {
@@ -319,7 +402,10 @@ export const downloadAllClubPacksPDF = async (fixtures, teams, setError, lunchEn
 export const downloadTeamFixturePDF = async (team, fixtures, setPdfLoading) => {
   setPdfLoading(true);
   try {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const [doc, qrData] = [
+      new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }),
+      _qrCodeCache ?? await _qrCodePromise,
+    ];
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 10;
 
@@ -399,6 +485,8 @@ export const downloadTeamFixturePDF = async (team, fixtures, setPdfLoading) => {
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
     doc.text('Generated ' + new Date().toLocaleDateString(), pageW / 2, finalY, { align: 'center' });
+
+    addQrCode(doc, finalY + 3, qrData);
 
     window.open(doc.output('bloburi'), '_blank');
   } catch (err) {
