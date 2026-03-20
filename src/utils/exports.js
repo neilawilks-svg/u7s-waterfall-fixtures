@@ -111,7 +111,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
     const fixtureData = [['Round', 'Time', 'Pitch', 'Zone', 'Team 1', 'Team 2', 'Club 1', 'Club 2', 'Cross-Zone', 'Referee', 'Referee Club', 'Ref Conflict']];
     fixtures.forEach(f => {
       fixtureData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name, f.team1.club, f.team2.club, f.isCrossZone ? 'Yes' : '',
-        f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED', f.referee ? f.referee.club : '', f.refereeConflict ? 'YES' : '']);
+        f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED', f.referee ? f.referee.club : '', f.refereeConflict ? 'YES' : '']);
     });
     const wsFixtures = XLSX.utils.aoa_to_sheet(fixtureData);
     XLSX.utils.book_append_sheet(wb, wsFixtures, 'All Fixtures');
@@ -123,7 +123,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
       teamFixtures.forEach(f => {
         const opponent = f.team1.id === team.id ? f.team2 : f.team1;
         teamData.push([team.name, team.club, team.zone || '', f.round, f.time, f.pitch, f.zone || '', opponent.name, opponent.club,
-          f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
+          f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
       });
     });
     const wsTeams = XLSX.utils.aoa_to_sheet(teamData);
@@ -135,7 +135,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
       const roundFixtures = fixtures.filter(f => f.round === round).sort((a, b) => a.pitch - b.pitch);
       roundFixtures.forEach(f => {
         roundData.push([f.round, f.time, f.pitch, f.zone || '', f.team1.name, f.team2.name,
-          f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
+          f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
       });
       if (round < rounds.length) {
         roundData.push(['', '', '', '', '', '', '', '']);
@@ -151,7 +151,7 @@ export const downloadFixturesAsExcel = async (fixtures, teams, zones, setError) 
       const pitchZone = zones.find(z => z.pitches.includes(pitch));
       pitchFixtures.forEach(f => {
         pitchData.push([f.pitch, pitchZone ? pitchZone.id : '', f.time, f.round, f.team1.name, f.team2.name,
-          f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
+          f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED', f.refereeConflict ? 'YES' : '']);
       });
       if (pitch < pitches.length) {
         pitchData.push(['', '', '', '', '', '', '', '']);
@@ -553,7 +553,7 @@ export const downloadClubPack = async (clubName, fixtures, teams, setError) => {
       teamFixtures.forEach((f, idx) => {
         const opp = f.team1.id === team.id ? f.team2 : f.team1;
         matchData.push([idx === 0 ? team.name : '', f.round, f.time, f.pitch, f.zone || '', opp.name, opp.club,
-          f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED']);
+          f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED']);
       });
       matchData.push(['', '', '', '', '', '', '', '']);
     });
@@ -620,7 +620,7 @@ export const printFixtures = (mode, fixtures, teams, zones) => {
       html += `<h2>Round ${round} - ${rf[0]?.time || ''}</h2>`;
       html += `<table><tr><th>Pitch</th><th>Zone</th><th>Team 1</th><th>Team 2</th><th>Referee</th></tr>`;
       rf.forEach(f => {
-        const refText = f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED';
+        const refText = f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED';
         const rowClass = f.refereeConflict ? ' class="conflict"' : '';
         html += `<tr${rowClass}><td>${f.pitch}</td><td>${f.zone || ''}</td><td>${f.team1.name}</td><td>${f.team2.name}</td><td>${refText}${f.refereeConflict ? ' *' : ''}</td></tr>`;
       });
@@ -636,7 +636,7 @@ export const printFixtures = (mode, fixtures, teams, zones) => {
       html += `<h2>Pitch ${pitch}${zone ? ` (Zone ${zone.id})` : ''}</h2>`;
       html += `<table><tr><th>Time</th><th>Round</th><th>Team 1</th><th>Team 2</th><th>Referee</th></tr>`;
       pf.forEach(f => {
-        const refText = f.referee ? f.referee.name : f.refereeUnavailable ? 'No Referee Available' : 'UNASSIGNED';
+        const refText = f.referee ? f.referee.name : f.refereeUnavailable ? `Unavailable (${f.team1.club} or ${f.team2.club} to officiate)` : 'UNASSIGNED';
         const rowClass = f.refereeConflict ? ' class="conflict"' : '';
         html += `<tr${rowClass}><td>${f.time}</td><td>${f.round}</td><td>${f.team1.name}</td><td>${f.team2.name}</td><td>${refText}${f.refereeConflict ? ' *' : ''}</td></tr>`;
       });

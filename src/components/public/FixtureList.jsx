@@ -28,7 +28,9 @@ function FixtureCard({ f, variant }) {
           Ref: {f.referee.name}{f.refereeConflict ? ' (conflict)' : ''}
         </div>
       ) : f.refereeUnavailable ? (
-        <div className={`${refSize} text-amber-600`}>No Referee Available</div>
+        <div className={`${refSize} font-medium text-amber-700`}>
+          Referee: Unavailable — {f.team1.club} or {f.team2.club} to officiate
+        </div>
       ) : null}
     </div>
   );
