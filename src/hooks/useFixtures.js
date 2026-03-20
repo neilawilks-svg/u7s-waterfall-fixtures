@@ -443,6 +443,7 @@ export function useFixtures() {
       setHiddenRounds(new Set());
       await saveFixtures(result.fixtures, result.teams, result.zones, false, new Set());
       setError(result.summary);
+      return result.analysis;
     } catch (err) {
       setError('Error importing fixtures: ' + err.message);
       console.error(err);

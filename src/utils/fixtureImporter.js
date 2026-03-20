@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { analyseSchedule } from './scheduleAnalysis';
 
 /** Download a blank import template with the correct headers and two example rows. */
 export function downloadImportTemplate() {
@@ -176,7 +177,9 @@ export function importFixturesFromExcel(file) {
         const clubCount = new Set(teams.map(t => t.club)).size;
         const summary = `Successfully imported ${fixtures.length} fixtures across ${roundCount} rounds for ${teams.length} teams from ${clubCount} clubs.`;
 
-        resolve({ fixtures, teams, zones, summary });
+        const analysis = analyseSchedule(fixtures, teams);
+
+        resolve({ fixtures, teams, zones, summary, analysis });
       } catch (err) {
         reject(err);
       }
