@@ -95,10 +95,11 @@ function addQrCode(doc, contentEndY, qrData) {
     const y = contentEndY + gap + (availableH - 4 - imgH) / 2;
     doc.addImage(qrData.dataUrl, 'JPEG', x, y, imgW, imgH, undefined, 'FAST');
   } else {
-    // Fallback: small thumbnail in the top-right corner
-    const imgW = 20;
-    const imgH = imgW / aspect;
-    doc.addImage(qrData.dataUrl, 'JPEG', pageW - margin - imgW, margin, imgW, imgH, undefined, 'FAST');
+    // Fallback: small thumbnail in the top-right corner, capped to 16 mm height so it
+    // stays within the title area above the table (which starts at margin + 18 mm).
+    const imgH = 16;
+    const imgW = imgH * aspect;
+    doc.addImage(qrData.dataUrl, 'JPEG', pageW - margin - imgW, margin + 1, imgW, imgH, undefined, 'FAST');
   }
 }
 
