@@ -78,7 +78,7 @@ export default function TeamDetail({ selectedTeam, teamFixtures, fixtures, zones
                 {item.referee ? (
                   <div className="text-xs text-gray-500 mt-1">Referee: {item.referee.name}</div>
                 ) : item.refereeUnavailable ? (
-                  <div className="text-xs text-amber-600 mt-1">No Referee Available</div>
+                  <div className="text-xs font-medium text-amber-700 mt-1">Referee: Unavailable — {item.team1.club} or {item.team2.club} to officiate</div>
                 ) : null}
               </div>
             );
