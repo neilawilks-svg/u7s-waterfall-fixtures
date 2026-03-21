@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, MapPin, Users, AlertTriangle, RefreshCw, WhatsApp } from '../icons';
-import { openClubPackPDFInTab, shareClubPackPDF } from '../../utils/exports';
+import { openClubPackPDFInTab, downloadClubPackPDF } from '../../utils/exports';
 
 function Tooltip({ text, children, align = 'left' }) {
   const [visible, setVisible] = useState(false);
@@ -30,7 +30,7 @@ function Tooltip({ text, children, align = 'left' }) {
   );
 }
 
-const canShareFiles = () => navigator.canShare?.({ files: [new File([], 'test.pdf', { type: 'application/pdf' })] }) ?? false;
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 function getClubWarnings(clubName, fixtures, teams) {
   const clubTeams = teams.filter(t => t.club === clubName);
@@ -75,7 +75,7 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
   };
 
   const handleWhatsApp = () => {
-    shareClubPackPDF(clubName, allFixtures, allTeams, setLoading, lunchEnabled, lunchStart, lunchEnd);
+    downloadClubPackPDF(clubName, allFixtures, allTeams, console.error, lunchEnabled, lunchStart, lunchEnd);
   };
 
   return (
@@ -168,7 +168,7 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
           {loading ? 'Generating PDF…' : 'Download Club Pack'}
         </button>
 
-        {canShareFiles() && (
+        {isMobile && (
           <button
             onClick={handleWhatsApp}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-sm bg-[#25D366] text-white hover:bg-[#1ebe5d] transition-colors"
