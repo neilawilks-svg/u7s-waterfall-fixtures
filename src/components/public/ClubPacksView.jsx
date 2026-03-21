@@ -21,9 +21,9 @@ function Tooltip({ text, children }) {
       onClick={() => setVisible(v => !v)}>
       {children}
       {visible && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 z-50 shadow-xl leading-relaxed pointer-events-none">
+        <div className="absolute bottom-full left-0 mb-2 w-60 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 z-50 shadow-xl leading-relaxed pointer-events-none">
           {text}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+          <div className="absolute top-full left-4 border-4 border-transparent border-t-gray-900" />
         </div>
       )}
     </div>
