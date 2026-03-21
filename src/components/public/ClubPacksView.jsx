@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Download, MapPin, Users, AlertTriangle, RefreshCw, WhatsApp } from '../icons';
 import { openClubPackPDFInTab } from '../../utils/exports';
 
-function Tooltip({ text, children }) {
+function Tooltip({ text, children, align = 'left' }) {
   const [visible, setVisible] = useState(false);
   const ref = useRef(null);
 
@@ -21,9 +21,9 @@ function Tooltip({ text, children }) {
       onClick={() => setVisible(v => !v)}>
       {children}
       {visible && (
-        <div className="absolute bottom-full left-0 mb-2 w-60 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 z-50 shadow-xl leading-relaxed pointer-events-none">
+        <div className={`absolute bottom-full mb-2 w-60 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 z-50 shadow-xl leading-relaxed pointer-events-none ${align === 'right' ? 'right-0' : 'left-0'}`}>
           {text}
-          <div className="absolute top-full left-4 border-4 border-transparent border-t-gray-900" />
+          <div className={`absolute top-full border-4 border-transparent border-t-gray-900 ${align === 'right' ? 'right-4' : 'left-4'}`} />
         </div>
       )}
     </div>
@@ -109,7 +109,7 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
               </Tooltip>
             )}
             {hasRefIssues && (
-              <Tooltip text="One or more fixtures involving this club have no available referee — the club may be asked to provide an official.">
+              <Tooltip align="right" text="One or more fixtures involving this club have no available referee — the club may be asked to provide an official.">
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 cursor-help select-none">
                   <AlertTriangle size={11} />
                   Referee issue
@@ -123,7 +123,7 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Teams</p>
-            <Tooltip text="The pitch number(s) shown next to each team are their home pitches for the day.">
+            <Tooltip align="right" text="The pitch number(s) shown next to each team are their home pitches for the day.">
               <span className="inline-flex items-center gap-1 text-xs text-gray-400 cursor-help select-none">
                 <MapPin size={10} className="text-[#7c1229]" />
                 <span>= home pitch</span>
