@@ -399,7 +399,7 @@ export const openClubPackPDFInTab = async (clubName, fixtures, teams, setLoading
     ]);
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     writeClubPages(doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, false, true, qrData);
-    window.open(doc.output('bloburi'), '_blank');
+    doc.save(clubName.replace(/[^a-zA-Z0-9]/g, '_') + '_Festival_Pack.pdf');
   } catch (err) {
     console.error('Error generating club pack PDF:', err);
   } finally {
