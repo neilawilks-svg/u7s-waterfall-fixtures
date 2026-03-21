@@ -407,6 +407,26 @@ export const openClubPackPDFInTab = async (clubName, fixtures, teams, setLoading
   }
 };
 
+export const shareClubPackPDF = async (clubName, fixtures, teams, setLoading, lunchEnabled, lunchStart, lunchEnd) => {
+  setLoading(true);
+  try {
+    const [sitePlanData, qrData] = await Promise.all([
+      _sitePlanCache ?? _sitePlanPromise,
+      _qrCodeCache   ?? _qrCodePromise,
+    ]);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    writeClubPages(doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, false, true, qrData);
+    const blob = doc.output('blob');
+    const fileName = clubName.replace(/[^a-zA-Z0-9]/g, '_') + '_Festival_Pack.pdf';
+    const file = new File([blob], fileName, { type: 'application/pdf' });
+    await navigator.share({ files: [file] });
+  } catch (err) {
+    if (err.name !== 'AbortError') console.error('Error sharing club pack PDF:', err);
+  } finally {
+    setLoading(false);
+  }
+};
+
 export const downloadAllClubPacksPDF = async (fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, includeSitePlan = true) => {
   try {
     const [sitePlanData, qrData] = await Promise.all([
