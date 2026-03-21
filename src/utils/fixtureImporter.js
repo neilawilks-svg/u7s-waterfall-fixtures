@@ -76,8 +76,8 @@ export function importFixturesFromExcel(file) {
           const time = parseTime(row[1]);
           const pitch = Number(row[2]);
           const zone = String(row[3]).trim().toUpperCase();
-          const team1Name = String(row[4]).trim();
-          const team2Name = String(row[5]).trim();
+          const team1NameRaw = String(row[4]).trim();
+          const team2NameRaw = String(row[5]).trim();
           const club1 = String(row[6]).trim();
           const club2 = String(row[7]).trim();
           const isCrossZone = parseBool(row[8]);
@@ -85,26 +85,33 @@ export function importFixturesFromExcel(file) {
           const refClub = row[10] ? String(row[10]).trim() : '';
           const refereeConflict = parseBool(row[11]);
 
-          if (!team1Name || !team2Name) continue;
+          if (!team1NameRaw || !team2NameRaw) continue;
 
           // Keywords that indicate a referee is explicitly unavailable (not just unassigned)
           const UNAVAILABLE = new Set(['unavailable', 'n/a', 'none', 'no referee', 'unavail']);
           const refUnavailable = UNAVAILABLE.has(refName.toLowerCase());
 
+          // Keywords that indicate a team slot has no opponent
+          const PLACEHOLDER_TEAM = new Set(['unavailable', 'n/a', 'none', 'tbc', 'tbd', 'bye']);
+          const isTeam1Placeholder = PLACEHOLDER_TEAM.has(team1NameRaw.toLowerCase());
+          const isTeam2Placeholder = PLACEHOLDER_TEAM.has(team2NameRaw.toLowerCase());
+          const team1Name = isTeam1Placeholder ? 'Opposition not Available' : team1NameRaw;
+          const team2Name = isTeam2Placeholder ? 'Opposition not Available' : team2NameRaw;
+
           // Ensure team objects exist
           if (!teamMap.has(team1Name)) {
-            teamMap.set(team1Name, { id: slugify(team1Name), name: team1Name, club: club1, zone: null });
+            teamMap.set(team1Name, { id: slugify(team1Name), name: team1Name, club: isTeam1Placeholder ? '' : club1, zone: null, ...(isTeam1Placeholder && { isPlaceholder: true }) });
           }
           if (!teamMap.has(team2Name)) {
-            teamMap.set(team2Name, { id: slugify(team2Name), name: team2Name, club: club2, zone: null });
+            teamMap.set(team2Name, { id: slugify(team2Name), name: team2Name, club: isTeam2Placeholder ? '' : club2, zone: null, ...(isTeam2Placeholder && { isPlaceholder: true }) });
           }
 
           // Track zone→pitch mapping
           if (!pitchZoneMap.has(zone)) pitchZoneMap.set(zone, new Set());
           pitchZoneMap.get(zone).add(pitch);
 
-          // Track intra-zone team counts for home-zone inference
-          if (!isCrossZone) {
+          // Track intra-zone team counts for home-zone inference (skip placeholder slots)
+          if (!isCrossZone && !isTeam1Placeholder && !isTeam2Placeholder) {
             if (!intraZoneCounts.has(zone)) intraZoneCounts.set(zone, new Map());
             const counts = intraZoneCounts.get(zone);
             counts.set(team1Name, (counts.get(team1Name) || 0) + 1);
