@@ -200,12 +200,10 @@ export default function FixtureImporter({ importFixtures, loading }) {
           i
         </button>
       </div>
-      <p className="text-sm text-gray-500 mb-1">Upload an Excel (.xlsx) file to replace the current fixtures.</p>
-      <p className="text-xs text-gray-400 font-mono mb-4">
-        Round · Time · Pitch · Zone · Team 1 · Team 2 · Club 1 · Club 2 · Cross-Zone · Referee · Referee Club · Ref Conflict
-      </p>
+      <p className="text-sm text-gray-500 mb-4">Upload an Excel (.xlsx) file to replace the current fixtures.</p>
       {showNotes && (
         <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-3">
+          <p className="font-bold text-blue-900">User Notes</p>
           <div>
             <p className="font-semibold mb-1">Referee column</p>
             <p className="text-blue-800">If no referee is available for a fixture, enter <code className="bg-blue-100 px-1 rounded font-mono text-xs">Unavailable</code> (or <code className="bg-blue-100 px-1 rounded font-mono text-xs">N/A</code>) in the Referee column. The fixture will be flagged so the club can be asked to provide an official — it won't be treated as an unassigned slot.</p>
@@ -226,7 +224,7 @@ export default function FixtureImporter({ importFixtures, loading }) {
         </button>
         <label className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 text-sm font-medium border border-gray-300">
           <Download size={16} className="rotate-180" />
-          {selectedFile ? selectedFile.name : 'Choose file…'}
+          {selectedFile ? selectedFile.name : 'Select file…'}
           <input
             ref={inputRef}
             type="file"
