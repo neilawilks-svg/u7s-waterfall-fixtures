@@ -542,6 +542,7 @@ export function useFixtures() {
 
   // Computed values
   const filteredTeams = teams.filter(t =>
+    !t.isPlaceholder &&
     t.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
