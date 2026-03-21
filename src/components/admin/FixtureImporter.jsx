@@ -173,6 +173,7 @@ export default function FixtureImporter({ importFixtures, loading }) {
   const inputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
+  const [showNotes, setShowNotes] = useState(false);
 
   const handleFileChange = (e) => {
     setSelectedFile(e.target.files[0] || null);
@@ -189,11 +190,32 @@ export default function FixtureImporter({ importFixtures, loading }) {
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-      <h2 className="text-lg font-bold text-gray-900 mb-0.5">Import Fixture Schedule</h2>
+      <div className="flex items-center gap-2 mb-0.5">
+        <h2 className="text-lg font-bold text-gray-900">Import Fixture Schedule</h2>
+        <button
+          onClick={() => setShowNotes(v => !v)}
+          className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${showNotes ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}
+          title="Show import notes"
+        >
+          i
+        </button>
+      </div>
       <p className="text-sm text-gray-500 mb-1">Upload an Excel (.xlsx) file to replace the current fixtures.</p>
       <p className="text-xs text-gray-400 font-mono mb-4">
         Round · Time · Pitch · Zone · Team 1 · Team 2 · Club 1 · Club 2 · Cross-Zone · Referee · Referee Club · Ref Conflict
       </p>
+      {showNotes && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 space-y-3">
+          <div>
+            <p className="font-semibold mb-1">Referee column</p>
+            <p className="text-blue-800">If no referee is available for a fixture, enter <code className="bg-blue-100 px-1 rounded font-mono text-xs">Unavailable</code> (or <code className="bg-blue-100 px-1 rounded font-mono text-xs">N/A</code>) in the Referee column. The fixture will be flagged so the club can be asked to provide an official — it won't be treated as an unassigned slot.</p>
+          </div>
+          <div>
+            <p className="font-semibold mb-1">Team 1 / Team 2 columns</p>
+            <p className="text-blue-800">If a fixture slot has no opponent yet, enter <code className="bg-blue-100 px-1 rounded font-mono text-xs">Unavailable</code>, <code className="bg-blue-100 px-1 rounded font-mono text-xs">N/A</code>, <code className="bg-blue-100 px-1 rounded font-mono text-xs">TBC</code>, or <code className="bg-blue-100 px-1 rounded font-mono text-xs">Bye</code>. This will display as <em>Opposition not Available</em> in the fixture list and will not appear as a selectable team in the public view.</p>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={downloadImportTemplate}
