@@ -1,6 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Download, MapPin, Users, AlertTriangle, RefreshCw, WhatsApp } from '../icons';
 import { openClubPackPDFInTab } from '../../utils/exports';
+
+function Tooltip({ text, children }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setVisible(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
+  }, [visible]);
+
+  return (
+    <div ref={ref} className="relative inline-flex"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+      onClick={() => setVisible(v => !v)}>
+      {children}
+      {visible && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 z-50 shadow-xl leading-relaxed pointer-events-none">
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -25,14 +53,6 @@ function getClubHomePitches(clubName, teams, zones) {
     .filter((v, i, a) => a.indexOf(v) === i)
     .sort((a, b) => a - b);
   return { zoneIds, pitches };
-}
-
-function formatPitches(pitches) {
-  if (pitches.length === 0) return '—';
-  if (pitches.length === 1) return `Pitch ${pitches[0]}`;
-  const last = pitches[pitches.length - 1];
-  const rest = pitches.slice(0, -1);
-  return `Pitches ${rest.join(', ')} & ${last}`;
 }
 
 function formatZones(zoneIds) {
@@ -94,16 +114,20 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
         {(hasAwayGames || hasRefIssues) && (
           <div className="flex flex-wrap gap-1.5">
             {hasAwayGames && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                <AlertTriangle size={11} />
-                Away fixtures
-              </span>
+              <Tooltip text="One or more of this club's teams play at least one match on a pitch outside their home zone.">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 cursor-help select-none">
+                  <AlertTriangle size={11} />
+                  Away fixtures
+                </span>
+              </Tooltip>
             )}
             {hasRefIssues && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                <AlertTriangle size={11} />
-                Referee issue
-              </span>
+              <Tooltip text="One or more fixtures involving this club have no available referee — the club may be asked to provide an official.">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 cursor-help select-none">
+                  <AlertTriangle size={11} />
+                  Referee issue
+                </span>
+              </Tooltip>
             )}
           </div>
         )}
@@ -121,14 +145,22 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
         </div>
 
         {/* Home pitches */}
-        <div className="flex items-center gap-2 text-sm text-gray-700">
-          <MapPin size={14} className="text-[#7c1229] flex-shrink-0" />
-          <span>
-            <span className="font-medium">{formatPitches(pitches)}</span>
-            {zoneIds.length > 0 && (
-              <span className="text-gray-400 ml-1">({formatZones(zoneIds)})</span>
-            )}
-          </span>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+            <MapPin size={11} className="text-[#7c1229]" />
+            Home Pitches
+          </p>
+          {pitches.length === 0 ? (
+            <span className="text-sm text-gray-400">—</span>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {pitches.map(p => (
+                <span key={p} className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-[#7c1229]/10 text-[#7c1229] text-sm font-bold border border-[#7c1229]/20">
+                  {p}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
