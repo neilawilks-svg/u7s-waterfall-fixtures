@@ -45,20 +45,8 @@ function getClubWarnings(clubName, fixtures, teams) {
   return { hasAwayGames, hasRefIssues };
 }
 
-function getClubHomePitches(clubName, teams, zones) {
-  const clubTeams = teams.filter(t => t.club === clubName);
-  const zoneIds = [...new Set(clubTeams.map(t => t.zone).filter(Boolean))].sort();
-  const pitches = zoneIds
-    .flatMap(id => zones.find(z => z.id === id)?.pitches ?? [])
-    .filter((v, i, a) => a.indexOf(v) === i)
-    .sort((a, b) => a - b);
-  return { zoneIds, pitches };
-}
-
-function formatZones(zoneIds) {
-  if (zoneIds.length === 0) return '';
-  if (zoneIds.length === 1) return `Zone ${zoneIds[0]}`;
-  return `Zones ${zoneIds.join(' & ')}`;
+function getTeamPitches(team, zones) {
+  return (zones.find(z => z.id === team.zone)?.pitches ?? []).slice().sort((a, b) => a - b);
 }
 
 function formatGeneratedAt(iso) {
@@ -80,7 +68,6 @@ function formatGeneratedAt(iso) {
 function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchStart, lunchEnd, allFixtures, allTeams }) {
   const [loading, setLoading] = useState(false);
   const { hasAwayGames, hasRefIssues } = getClubWarnings(clubName, fixtures, allTeams);
-  const { zoneIds, pitches } = getClubHomePitches(clubName, allTeams, zones);
   const hasWarning = hasAwayGames || hasRefIssues;
 
   const handleDownload = () => {
@@ -134,33 +121,32 @@ function ClubTile({ clubName, clubTeams, fixtures, zones, lunchEnabled, lunchSta
 
         {/* Teams */}
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Teams</p>
-          <div className="flex flex-wrap gap-1.5">
-            {clubTeams.map(t => (
-              <span key={t.id} className="px-2 py-0.5 bg-[#7c1229]/8 text-[#7c1229] rounded-full text-xs font-medium border border-[#7c1229]/15">
-                {t.name}
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Teams</p>
+            <Tooltip text="The pitch number(s) shown next to each team are their home pitches for the day.">
+              <span className="inline-flex items-center gap-1 text-xs text-gray-400 cursor-help select-none">
+                <MapPin size={10} className="text-[#7c1229]" />
+                <span>= home pitch</span>
               </span>
-            ))}
+            </Tooltip>
           </div>
-        </div>
-
-        {/* Home pitches */}
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
-            <MapPin size={11} className="text-[#7c1229]" />
-            Home Pitches
-          </p>
-          {pitches.length === 0 ? (
-            <span className="text-sm text-gray-400">—</span>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {pitches.map(p => (
-                <span key={p} className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-[#7c1229]/10 text-[#7c1229] text-sm font-bold border border-[#7c1229]/20">
-                  {p}
+          <div className="flex flex-wrap gap-1.5">
+            {clubTeams.map(t => {
+              const teamPitches = getTeamPitches(t, zones);
+              return (
+                <span key={t.id} className="inline-flex items-center gap-1 px-2 py-1 bg-[#7c1229]/8 text-[#7c1229] rounded-full text-xs font-medium border border-[#7c1229]/15">
+                  {t.name}
+                  {teamPitches.length > 0 && (
+                    <>
+                      <span className="text-[#7c1229]/25 mx-0.5">|</span>
+                      <MapPin size={9} className="flex-shrink-0 opacity-60" />
+                      <span className="font-bold">{teamPitches.join('·')}</span>
+                    </>
+                  )}
                 </span>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
       </div>
 
