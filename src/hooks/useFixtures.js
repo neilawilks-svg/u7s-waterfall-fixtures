@@ -46,6 +46,7 @@ export function useFixtures() {
   const [hiddenRounds, setHiddenRounds] = useState(new Set());
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notifiedFixtures, setNotifiedFixtures] = useState(new Set());
+  const [generatedAt, setGeneratedAt] = useState(null);
 
   const UNAVAILABLE_NAMES = new Set(['unavailable', 'n/a', 'none', 'no referee', 'unavail']);
 
@@ -86,6 +87,9 @@ export function useFixtures() {
           }
           if (data.hiddenRounds) {
             setHiddenRounds(new Set(data.hiddenRounds));
+          }
+          if (data.generated) {
+            setGeneratedAt(data.generated);
           }
         }
       }
@@ -612,5 +616,6 @@ export function useFixtures() {
     enableNotifications,
     getTeamFixtures,
     getCurrentAndNext,
+    generatedAt,
   };
 }

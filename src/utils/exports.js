@@ -390,6 +390,23 @@ export const downloadClubPackPDF = async (clubName, fixtures, teams, setError, l
   }
 };
 
+export const openClubPackPDFInTab = async (clubName, fixtures, teams, setLoading, lunchEnabled, lunchStart, lunchEnd) => {
+  setLoading(true);
+  try {
+    const [sitePlanData, qrData] = await Promise.all([
+      _sitePlanCache ?? _sitePlanPromise,
+      _qrCodeCache   ?? _qrCodePromise,
+    ]);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    writeClubPages(doc, clubName, fixtures, teams, sitePlanData, lunchEnabled, lunchStart, lunchEnd, false, true, qrData);
+    window.open(doc.output('bloburi'), '_blank');
+  } catch (err) {
+    console.error('Error generating club pack PDF:', err);
+  } finally {
+    setLoading(false);
+  }
+};
+
 export const downloadAllClubPacksPDF = async (fixtures, teams, setError, lunchEnabled, lunchStart, lunchEnd, includeSitePlan = true) => {
   try {
     const [sitePlanData, qrData] = await Promise.all([
